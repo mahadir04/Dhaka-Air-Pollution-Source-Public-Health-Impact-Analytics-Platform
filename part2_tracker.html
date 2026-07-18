@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Diagnostic & Health Impact Analytics Engine</title>
+<style>
+  :root {
+    --navy: #0E2A47;
+    --navy-deep: #091D34;
+    --blue: #2C7EC7;
+    --cyan: #1BBBE9;
+    --accent: #2C7EC7;
+    --ink: #1A2436;
+    --muted: #5B6B85;
+    --muted-onnavy: #AEB6C4;
+    --card: #FFFFFF;
+    --border: #E2E7F0;
+    --bg: #F7F9FC;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Calibri, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+  }
+  .hero {
+    background: linear-gradient(160deg, var(--navy) 0%, var(--navy-deep) 100%);
+    color: #fff;
+    padding: 40px 44px 34px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::after {
+    content: "";
+    position: absolute;
+    right: -60px; top: -80px;
+    width: 260px; height: 260px;
+    border-radius: 50%;
+    background: radial-gradient(circle, var(--accent) 0%, transparent 70%);
+    opacity: 0.25;
+  }
+  .eyebrow {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 2.5px;
+    color: var(--accent);
+    margin-bottom: 10px;
+  }
+  h1 {
+    font-family: Cambria, Georgia, serif;
+    font-size: 32px;
+    margin: 0 0 10px;
+    line-height: 1.15;
+  }
+  .mission {
+    font-style: italic;
+    color: var(--muted-onnavy);
+    font-size: 14.5px;
+    max-width: 640px;
+    margin: 0 0 26px;
+  }
+  .progress-wrap {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    max-width: 640px;
+  }
+  .progress-track {
+    flex: 1;
+    height: 10px;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.12);
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    border-radius: 6px;
+    background: linear-gradient(90deg, var(--cyan), var(--accent));
+    width: 0%;
+    transition: width 0.35s ease;
+  }
+  .progress-label {
+    font-size: 13px;
+    font-weight: 700;
+    white-space: nowrap;
+    min-width: 86px;
+    text-align: right;
+  }
+  main {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 30px 24px 70px;
+  }
+  .stage {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+  .stage-head {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 16px 18px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .stage-num {
+    flex: none;
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    background: var(--navy);
+    color: #fff;
+    font-weight: 700;
+    font-size: 13.5px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .stage-num.done { background: var(--accent); }
+  .stage-title {
+    flex: 1;
+    font-weight: 700;
+    font-size: 15px;
+  }
+  .stage-count {
+    font-size: 12px;
+    color: var(--muted);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .chevron {
+    flex: none;
+    width: 18px; height: 18px;
+    transition: transform 0.2s ease;
+    color: var(--muted);
+  }
+  .stage.open .chevron { transform: rotate(90deg); }
+  .stage-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.25s ease;
+    border-top: 1px solid var(--border);
+  }
+  .stage.open .stage-body { border-top: 1px solid var(--border); }
+  .task {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 11px 18px 11px 62px;
+    font-size: 13.5px;
+    color: var(--ink);
+    cursor: pointer;
+    border-bottom: 1px solid #F0F3F8;
+  }
+  .task:last-child { border-bottom: none; }
+  .task.checked { color: var(--muted); text-decoration: line-through; }
+  .box {
+    flex: none;
+    width: 18px; height: 18px;
+    border-radius: 5px;
+    border: 2px solid #C7D0DE;
+    margin-top: 1px;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s ease;
+  }
+  .task.checked .box { background: var(--accent); border-color: var(--accent); }
+  .box svg { width: 11px; height: 11px; opacity: 0; transition: opacity 0.1s; }
+  .task.checked .box svg { opacity: 1; }
+  .footer-bar {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 0 24px 40px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .status-msg { font-size: 12.5px; color: var(--muted); }
+  .reset-btn {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--muted);
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 7px 14px;
+    cursor: pointer;
+  }
+  .reset-btn:hover { border-color: var(--accent); color: var(--accent); }
+</style>
+</head>
+<body>
+  <div class="hero">
+    <div class="eyebrow">PART 2 OF 3 · ANALYTICS ENGINE</div>
+    <h1>Diagnostic & Health Impact Analytics Engine</h1>
+    <p class="mission">Turn clean data into a source diagnosis and a quantified health number.</p>
+    <div class="progress-wrap">
+      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="progress-label" id="progressLabel">0 / 0 done</div>
+    </div>
+  </div>
+  <main id="stageList"></main>
+  <div class="footer-bar">
+    <span class="status-msg" id="statusMsg">Progress saves automatically.</span>
+    <button class="reset-btn" id="resetBtn">Reset this part</button>
+  </div>
+
+<script>
+const STORAGE_KEY = "airimpact:part2";
+const STAGES = [{"name":"Source-Signature Rule Design","tasks":["Encode brick-kiln calendar rule (SO2 elevation, Nov–Mar dry season)","Encode traffic rule (NO2 spikes, rush hours, weekday-heavy)","Encode biomass-burning rule (PM2.5 spike, no matching NO2 rise)","Encode construction-dust rule (PM10-dominant, no gas rise, weekday)"]},{"name":"Source-Signature Implementation","tasks":["Implement pattern-matching in Spark SQL","Assign a source_signature label per reading","Expert / manual validation of assigned signatures"]},{"name":"Population-Weighted Exposure","tasks":["Compute exposure_score = concentration × population_catchment","Validate against known high-density areas"]},{"name":"CRF Coefficient Integration","tasks":["Collect WHO AQG (2021) short-term PM concentration-response function","Collect Pope et al. / ACS long-term PM2.5 coefficient","Collect India difference-in-differences (2024) regional coefficient","Document all coefficients with full citations"]},{"name":"Health Burden Estimation","tasks":["Apply CRF coefficients → attributable_risk_pct","Compute per station, area, and season"]},{"name":"Comparative Ranking","tasks":["Rank areas/seasons by exposure_score × attributable_risk_pct","Compare against a raw-pollution-only ranking to show divergence"]},{"name":"Secondary Forecasting Module","tasks":["Feature engineering — lags & rolling averages via Window functions","Train GBT / RF models (Spark MLlib)","Evaluate with RMSE, MAE, R²"]},{"name":"Sensitivity Analysis","tasks":["Re-run health burden across the full CRF coefficient range","Report burden as a range, not a single point estimate"]}];
+
+let state = {};
+
+function checkKey(si, ti) { return si + "-" + ti; }
+
+function computeTotals() {
+  let total = 0, done = 0;
+  STAGES.forEach((s, si) => s.tasks.forEach((t, ti) => {
+    total++;
+    if (state[checkKey(si, ti)]) done++;
+  }));
+  return { total, done };
+}
+
+function render() {
+  const list = document.getElementById("stageList");
+  list.innerHTML = "";
+  STAGES.forEach((stage, si) => {
+    const doneCount = stage.tasks.filter((t, ti) => state[checkKey(si, ti)]).length;
+    const allDone = doneCount === stage.tasks.length;
+    const el = document.createElement("div");
+    el.className = "stage" + (state["_open_" + si] ? " open" : "");
+    el.innerHTML = `
+      <div class="stage-head" data-si="${si}">
+        <div class="stage-num ${allDone ? 'done' : ''}">${allDone ? '✓' : si + 1}</div>
+        <div class="stage-title">${stage.name}</div>
+        <div class="stage-count">${doneCount}/${stage.tasks.length}</div>
+        <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+      <div class="stage-body" style="max-height: ${state['_open_' + si] ? '600px' : '0'}">
+        ${stage.tasks.map((t, ti) => `
+          <div class="task ${state[checkKey(si, ti)] ? 'checked' : ''}" data-si="${si}" data-ti="${ti}">
+            <div class="box"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg></div>
+            <div>${t}</div>
+          </div>`).join("")}
+      </div>
+    `;
+    list.appendChild(el);
+  });
+
+  list.querySelectorAll(".stage-head").forEach(h => {
+    h.addEventListener("click", () => {
+      const si = h.dataset.si;
+      state["_open_" + si] = !state["_open_" + si];
+      render();
+    });
+  });
+  list.querySelectorAll(".task").forEach(t => {
+    t.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const si = t.dataset.si, ti = t.dataset.ti;
+      const key = checkKey(si, ti);
+      state[key] = !state[key];
+      save();
+      render();
+      updateProgress();
+    });
+  });
+
+  updateProgress();
+}
+
+function updateProgress() {
+  const { total, done } = computeTotals();
+  const pct = total ? Math.round((done / total) * 100) : 0;
+  document.getElementById("progressFill").style.width = pct + "%";
+  document.getElementById("progressLabel").textContent = done + " / " + total + " done (" + pct + "%)";
+}
+
+async function save() {
+  try {
+    await window.storage.set(STORAGE_KEY, JSON.stringify(state), false);
+    document.getElementById("statusMsg").textContent = "Saved just now.";
+  } catch (e) {
+    document.getElementById("statusMsg").textContent = "Couldn't save — progress will reset on reload.";
+  }
+}
+
+async function load() {
+  try {
+    const result = await window.storage.get(STORAGE_KEY, false);
+    if (result && result.value) state = JSON.parse(result.value);
+  } catch (e) {
+    state = {};
+  }
+  render();
+}
+
+document.getElementById("resetBtn").addEventListener("click", async () => {
+  state = {};
+  render();
+  try {
+    await window.storage.delete(STORAGE_KEY, false);
+    document.getElementById("statusMsg").textContent = "Progress reset.";
+  } catch (e) {}
+});
+
+load();
+</script>
+</body>
+</html>
