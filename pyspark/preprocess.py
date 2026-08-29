@@ -110,6 +110,13 @@ def fill_gaps(sdf: SparkDataFrame) -> SparkDataFrame:
             )
         )
 
+    # Materialize here — Steps A+B chained 2×len(fill_cols) window-function
+    # columns onto sdf without ever triggering an action. Without cutting the
+    # lineage now, each of Step C's per-column joins below (and the final
+    # per-column .count() calls) would re-execute that entire chain from
+    # scratch, compounding into a near-exponential slowdown.
+    sdf = sdf.localCheckpoint(eager=True)
+
     # Step C: For remaining nulls, fill with station-level hourly median
     # (hour-of-day median per station)
     sdf = sdf.withColumn("_hour", F.hour("timestamp"))
@@ -129,6 +136,9 @@ def fill_gaps(sdf: SparkDataFrame) -> SparkDataFrame:
             col,
             F.coalesce(F.col(col), F.col(f"_median_{col}"))
         ).drop(f"_median_{col}")
+        # Each join self-references the growing sdf lineage — checkpoint
+        # after every column so the chain doesn't compound across the loop.
+        sdf = sdf.localCheckpoint(eager=True)
 
     # Clean up temp columns
     temp_cols = [c for c in sdf.columns if c.startswith("_")]
@@ -189,6 +199,11 @@ def clip_outliers(sdf: SparkDataFrame) -> SparkDataFrame:
         else:
             print(f"  [clip] {col}: no outliers detected")
 
+        # Checkpoint after each column — each iteration joins onto sdf, and
+        # without cutting the lineage here the chain (and its per-column
+        # .count()) recompiles from scratch every time it grows.
+        sdf = sdf.localCheckpoint(eager=True)
+
     return sdf
 
 
@@ -245,6 +260,7 @@ def main():
 
     # Load the enriched dataset
     sdf = spark.read.parquet(str(POPULATION_PARQUET_DIR))
+    sdf = sdf.withColumn("station_id", F.col("station_id").cast("string"))
     print(f"[preprocess] Loaded: {sdf.count():,} rows, "
           f"{len(sdf.columns)} columns\n")
 
@@ -271,6 +287,10 @@ def main():
         sdf = sdf.withColumn("year", F.year("date"))
     if "month" not in sdf.columns:
         sdf = sdf.withColumn("month", F.month("date"))
+
+    # Force station_id to string — Spark's partition-column type inference
+    # can otherwise treat an all-numeric station_id as a double on re-read.
+    sdf = sdf.withColumn("station_id", F.col("station_id").cast("string"))
 
     # Save cleaned data
     out_path = str(CLEANED_PARQUET_DIR)

@@ -63,6 +63,9 @@ def load_cleaned_data() -> pd.DataFrame:
     spark = get_spark()
     sdf = spark.read.parquet(str(CLEANED_PARQUET_DIR))
     pdf = sdf.toPandas()
+    # Spark's partition-column type inference can turn an all-numeric
+    # station_id into a float on read (e.g. "6240023" -> 6240023.0) — undo it.
+    pdf["station_id"] = pdf["station_id"].apply(lambda x: str(int(float(x))))
     print(f"[EDA] Loaded {len(pdf):,} rows, {len(pdf.columns)} columns")
 
     # Ensure timestamp is datetime
