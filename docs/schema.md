@@ -51,7 +51,7 @@ data/processed/cleaned/
 
 | Column | Type | Description | Source |
 |---|---|---|---|
-| `population_catchment` | int | Estimated population within station catchment area | WorldPop / BBS census |
+| `population_catchment` | int | Estimated population within station catchment area | LandScan Global / BBS census |
 
 ### Partition Columns
 

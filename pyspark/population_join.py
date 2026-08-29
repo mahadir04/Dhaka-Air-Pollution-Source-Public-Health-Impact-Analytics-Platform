@@ -6,16 +6,27 @@ a `population_catchment` value — the estimated number of people living
 within a configurable radius of each station.
 
 Two modes:
-  --source worldpop   Use WorldPop gridded raster (requires rasterio + .tif file)
+  --source landscan   Use LandScan Global gridded raster (requires rasterio + .tif file)
   --source synthetic  Generate representative synthetic population data (default)
 
-The synthetic mode lets the pipeline run end-to-end without a large raster
-download.  Replace with real data for final analysis.
+LandScan Global (https://landscan.ornl.gov/) is Oak Ridge National
+Laboratory's ambient-population raster, ~1km (30 arc-second) resolution
+worldwide. ORNL requires free account registration before you can download
+the GeoTIFF — there's no anonymous/programmatic download endpoint — so:
+  1. Register at https://landscan.ornl.gov/ and download the current
+     "LandScan Global" GeoTIFF release.
+  2. Save it to data/population/landscan_global.tif (or any path, and pass
+     --raster <path>).
+  3. Run: python pyspark/population_join.py --source landscan
+
+The synthetic mode lets the pipeline run end-to-end without that download —
+it's a documented BBS-census-based placeholder, not a substitute for the
+raster in the final analysis.
 
 Usage
 -----
     python pyspark/population_join.py --source synthetic
-    python pyspark/population_join.py --source worldpop --raster data/population/bgd_ppp_2020.tif
+    python pyspark/population_join.py --source landscan --raster data/population/landscan_global.tif
 """
 
 import argparse
@@ -32,7 +43,7 @@ from pyspark.sql import functions as F
 from pyspark.sql import DataFrame as SparkDataFrame
 from utils.config import (
     WEATHER_PARQUET_DIR, POPULATION_PARQUET_DIR, CLEANED_PARQUET_DIR, POPULATION_DIR,
-    POPULATION_CATCHMENT_RADIUS_KM,
+    POPULATION_CATCHMENT_RADIUS_KM, LANDSCAN_RASTER_PATH, LANDSCAN_CITATION,
 )
 from utils.spark_session import get_spark
 
@@ -54,6 +65,8 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 # BBS ward-level census reference values for Dhaka City Corporation areas.
 # These are representative estimates for 2020 (total Dhaka metro ≈ 22 million).
+# Keyed by station_id — covers the fixed 4-station set used by mock_ingest.py
+# for offline development.
 DHAKA_WARD_POPULATIONS = {
     # station_id → approximate catchment population (within ~3 km radius)
     # Denser core areas vs. suburban areas
@@ -63,48 +76,86 @@ DHAKA_WARD_POPULATIONS = {
     "233592": {"area": "Gulshan", "pop_catchment": 300_000},
 }
 
-# Default if a station isn't in our lookup
-DEFAULT_CATCHMENT_POP = 250_000
+# Real OpenAQ station names churn (station IDs are reissued), so real-API
+# stations are matched by neighborhood keyword in their name instead —
+# approximate ward population density (people/km²) per area, from BBS-style
+# density tiers (dense core wards vs. planned/diplomatic suburbs).
+DHAKA_AREA_DENSITY = {
+    "hazaribagh":       ("Hazaribagh/Jigatola", 42_000),
+    "jigatola":         ("Hazaribagh/Jigatola", 42_000),
+    "mirpur":           ("Mirpur", 38_000),
+    "dhanmondi":        ("Dhanmondi", 35_000),
+    "moghbazar":        ("Moghbazar", 33_000),
+    "badda":            ("Badda", 30_000),
+    "dhaka university": ("Dhaka University/Old Dhaka", 40_000),
+    "uttara":           ("Uttara", 20_000),
+    "baridhara":        ("Baridhara", 16_000),
+    "gulshan":          ("Gulshan", 18_000),
+    "diplomatic":       ("Baridhara/Gulshan (Diplomatic Zone)", 16_000),
+}
+
+# Dhaka metro average density (people/km²) — fallback when neither a
+# station_id nor a name keyword match is found.
+DEFAULT_DENSITY = 23_000
+DEFAULT_CATCHMENT_POP = int(DEFAULT_DENSITY * math.pi * POPULATION_CATCHMENT_RADIUS_KM ** 2)
 
 
 def generate_synthetic_population(stations_pdf: pd.DataFrame) -> pd.DataFrame:
     """Generate representative population_catchment values for each station.
 
-    Uses ward-level census estimates for known stations and a density-based
-    heuristic for unknown ones.  This is a development proxy — replace with
-    real WorldPop raster integration for production analysis.
+    Uses ward-level census estimates for known station_ids (the fixed
+    mock_ingest.py set), then neighborhood-keyword matching against the
+    station name (for real OpenAQ stations, whose IDs churn), then a
+    Dhaka-average density heuristic as a last resort. This is a development
+    proxy — replace with real LandScan raster integration for production
+    analysis (see module docstring).
     """
+    area_km2 = math.pi * POPULATION_CATCHMENT_RADIUS_KM ** 2
     rows = []
     for _, row in stations_pdf.iterrows():
         sid = str(row["station_id"])
+        name_lower = str(row.get("station_name", "")).lower()
+
         if sid in DHAKA_WARD_POPULATIONS:
             info = DHAKA_WARD_POPULATIONS[sid]
             pop = info["pop_catchment"]
             area = info["area"]
         else:
-            # Heuristic: Dhaka average density ≈ 23,000/km²
-            # Catchment area ≈ π × r²
-            area_km2 = math.pi * POPULATION_CATCHMENT_RADIUS_KM ** 2
-            pop = int(23_000 * area_km2)
-            area = "estimated"
+            matched = next(
+                (v for kw, v in DHAKA_AREA_DENSITY.items() if kw in name_lower),
+                None,
+            )
+            if matched:
+                area, density = matched
+                pop = int(density * area_km2)
+            else:
+                # Heuristic: Dhaka average density ≈ 23,000/km²
+                pop = int(DEFAULT_DENSITY * area_km2)
+                area = "estimated (Dhaka metro average)"
         rows.append({
             "station_id": sid,
             "population_catchment": pop,
             "catchment_area_name": area,
-            "data_source": "synthetic_BBS_estimate",
+            "data_source": "synthetic_BBS_estimate_pending_landscan",
         })
         print(f"  [pop] Station {sid} ({area}): {pop:,} people in catchment")
 
     return pd.DataFrame(rows)
 
 
-# ─────────────────────────── WorldPop raster ─────────────────────────────────
+# ─────────────────────────── LandScan raster ──────────────────────────────────
 
 def compute_population_from_raster(stations_pdf: pd.DataFrame,
                                     raster_path: str) -> pd.DataFrame:
-    """Sum WorldPop gridded population within a radius of each station.
+    """Sum LandScan Global gridded population within a radius of each station.
 
-    Requires `rasterio` and a GeoTIFF raster file.
+    LandScan Global (https://landscan.ornl.gov/) distributes an ambient-
+    population count raster (~1km / 30 arc-second cells) as a GeoTIFF, in
+    the same "population count per cell" convention used here — so summing
+    valid cells within a radius window gives the catchment population.
+
+    Requires `rasterio` and a LandScan GeoTIFF downloaded per the
+    registration instructions in this module's docstring.
     """
     try:
         import rasterio
@@ -115,7 +166,9 @@ def compute_population_from_raster(stations_pdf: pd.DataFrame,
 
     raster_file = Path(raster_path)
     if not raster_file.exists():
-        print(f"[pop] Raster file not found: {raster_file}")
+        print(f"[pop] LandScan raster not found: {raster_file}")
+        print(f"[pop] Register and download it from https://landscan.ornl.gov/ "
+              f"then place it at that path (see module docstring).")
         print("[pop] Falling back to synthetic data.")
         return generate_synthetic_population(stations_pdf)
 
@@ -132,7 +185,7 @@ def compute_population_from_raster(stations_pdf: pd.DataFrame,
 
             # Window around station
             col_center, row_center = ~src.transform * (lon, lat)
-            radius_pixels = int(radius_deg / pixel_size_deg)
+            radius_pixels = max(1, int(radius_deg / pixel_size_deg))
 
             row_start = max(0, int(row_center) - radius_pixels)
             col_start = max(0, int(col_center) - radius_pixels)
@@ -144,18 +197,19 @@ def compute_population_from_raster(stations_pdf: pd.DataFrame,
             except Exception:
                 data = np.array([])
 
-            # Sum population (WorldPop uses -99999 or NaN for no-data)
+            # Sum population (LandScan uses negative sentinel values for no-data)
             valid = data[(data > 0) & (data < 1e8)]
             pop = int(np.sum(valid)) if valid.size > 0 else DEFAULT_CATCHMENT_POP
 
             rows.append({
                 "station_id": sid,
                 "population_catchment": pop,
-                "catchment_area_name": f"worldpop_r{POPULATION_CATCHMENT_RADIUS_KM}km",
-                "data_source": "worldpop_raster",
+                "catchment_area_name": f"landscan_r{POPULATION_CATCHMENT_RADIUS_KM}km",
+                "data_source": "landscan_raster",
             })
-            print(f"  [pop] Station {sid}: {pop:,} people (WorldPop raster)")
+            print(f"  [pop] Station {sid}: {pop:,} people (LandScan raster)")
 
+    print(f"[pop] Source citation: {LANDSCAN_CITATION}")
     return pd.DataFrame(rows)
 
 
@@ -166,6 +220,7 @@ def load_weather_enriched() -> SparkDataFrame:
     spark = get_spark()
     path = str(WEATHER_PARQUET_DIR)
     sdf = spark.read.parquet(path)
+    sdf = sdf.withColumn("station_id", F.col("station_id").cast("string"))
     print(f"[pop_join] Loaded enriched data: {sdf.count():,} rows")
     return sdf
 
@@ -215,10 +270,11 @@ def parse_args():
         description="Join population data to monitoring stations."
     )
     parser.add_argument("--source", default="synthetic",
-                        choices=["worldpop", "synthetic"],
+                        choices=["landscan", "synthetic"],
                         help="Population data source (default: synthetic)")
-    parser.add_argument("--raster", type=str, default=None,
-                        help="Path to WorldPop GeoTIFF raster file")
+    parser.add_argument("--raster", type=str, default=str(LANDSCAN_RASTER_PATH),
+                        help="Path to LandScan Global GeoTIFF raster file "
+                             f"(default: {LANDSCAN_RASTER_PATH})")
     return parser.parse_args()
 
 
@@ -234,14 +290,14 @@ def main():
 
     # Get unique stations
     stations_pdf = (
-        sdf.select("station_id", "latitude", "longitude")
+        sdf.select("station_id", "station_name", "latitude", "longitude")
         .distinct()
         .toPandas()
     )
     print(f"[pop_join] {len(stations_pdf)} unique station(s) to process.\n")
 
     # Compute population catchment
-    if args.source == "worldpop" and args.raster:
+    if args.source == "landscan":
         pop_pdf = compute_population_from_raster(stations_pdf, args.raster)
     else:
         pop_pdf = generate_synthetic_population(stations_pdf)

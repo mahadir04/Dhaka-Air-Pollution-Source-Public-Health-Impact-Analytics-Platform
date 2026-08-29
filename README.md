@@ -64,7 +64,7 @@ OpenAQ API (multi-station, multi-pollutant, Dhaka)
 Weather Enrichment (temperature, humidity, wind speed/direction, pressure)
                           │
                           ▼
-Population Data (WorldPop / census, ward-level)
+Population Data (LandScan Global / census, ward-level)
                           │
                           ▼
 PySpark Ingestion & Preprocessing
@@ -94,7 +94,7 @@ Comparative Ranking (areas & seasons by estimated health burden)
 |---|---|
 | **Distributed compute** | Apache Spark, PySpark, Spark SQL, Window functions, MLlib |
 | **Language** | Python 3.10+ |
-| **Population data** | WorldPop gridded population rasters, or Bangladesh census ward-level tables |
+| **Population data** | LandScan Global gridded population rasters, or Bangladesh census ward-level tables |
 | **Health burden methodology** | Published concentration-response coefficients (WHO Global Air Quality Guidelines, peer-reviewed cohort studies) |
 | **ML (secondary forecasting)** | Gradient Boosted Trees, Random Forest (Spark MLlib) |
 | **Visualization** | Plotly, Folium (choropleth health-risk map), Matplotlib |
@@ -129,7 +129,7 @@ Comparative Ranking (areas & seasons by estimated health burden)
 ### 4. Population Data
 | Source | Description |
 |---|---|
-| WorldPop | Free gridded population density rasters, ~100m resolution, usable for Dhaka |
+| LandScan Global | ORNL ambient-population density rasters, ~1km resolution, requires free registration to download |
 | Bangladesh census (BBS) | Ward-level population figures, alternative/validation source |
 
 ### 5. Health Burden Reference Coefficients

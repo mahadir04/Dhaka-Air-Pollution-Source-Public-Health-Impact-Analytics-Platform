@@ -6,10 +6,25 @@ coefficients are defined here so every script draws from one source of truth.
 """
 
 import os
+import sys
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Windows consoles default to a cp1252 stdout/stderr, which can't encode the
+# Unicode arrows (→, ✓, …) these scripts print — reconfigure to UTF-8 so
+# every script that imports this module can print them without crashing.
+if sys.platform == "win32":
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            _stream.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
 
 # ─────────────────────────── Project root ────────────────────────────────────
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+# Load variables from a .env file at the project root (OPENAQ_API_KEY, etc.)
+load_dotenv(PROJECT_ROOT / ".env")
 
 # ─────────────────────────── Directory paths ─────────────────────────────────
 DATA_DIR           = PROJECT_ROOT / "data"
@@ -121,6 +136,17 @@ CRF_COEFFICIENTS = {
 # ─────────────────────────── Population defaults ─────────────────────────────
 # Catchment radius in km for assigning population to each station
 POPULATION_CATCHMENT_RADIUS_KM = 3.0
+
+# LandScan Global population raster (https://landscan.ornl.gov/).
+# ORNL requires free registration before downloading the GeoTIFF — there is
+# no anonymous direct-download API. Register, download the annual "LandScan
+# Global" GeoTIFF, and place it at this path (or pass --raster explicitly to
+# pyspark/population_join.py).
+LANDSCAN_RASTER_PATH = POPULATION_DIR / "landscan_global.tif"
+LANDSCAN_CITATION = (
+    "Oak Ridge National Laboratory. LandScan Global Population Database. "
+    "https://landscan.ornl.gov/"
+)
 
 # ─────────────────────────── Spark defaults ──────────────────────────────────
 SPARK_APP_NAME = "DhakaAirHealthAnalytics"

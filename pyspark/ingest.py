@@ -49,7 +49,14 @@ def _headers() -> dict:
 def discover_dhaka_locations() -> list[dict]:
     """Identify all Dhaka-area monitoring locations from OpenAQ v3.
 
-    Returns a list of dicts with keys: location_id, name, latitude, longitude.
+    Returns a list of dicts with keys: location_id, name, latitude, longitude,
+    sensors (list of {sensor_id, parameter} restricted to our POLLUTANTS).
+
+    Note: OpenAQ v3 has no location-level measurements endpoint — each
+    location exposes one sensor per parameter it reports, and measurements
+    must be pulled per sensor_id (see fetch_sensor_measurements). The
+    /locations response already includes each location's sensor list, so
+    we capture it here rather than re-deriving it from a fixed parameter map.
     """
     url = f"{OPENAQ_BASE_URL}/locations"
     params = {
@@ -66,13 +73,14 @@ def discover_dhaka_locations() -> list[dict]:
         data = resp.json()
     except requests.RequestException as exc:
         print(f"[ingest] WARNING: OpenAQ locations endpoint failed: {exc}")
-        print("[ingest] Falling back to known Dhaka stations …")
-        return _fallback_dhaka_stations()
+        print("[ingest] Real ingestion unavailable — use pyspark/mock_ingest.py "
+              "for offline development.")
+        return []
 
     results = data.get("results", [])
     if not results:
-        print("[ingest] No locations returned by API, using fallback stations.")
-        return _fallback_dhaka_stations()
+        print("[ingest] No locations returned by API.")
+        return []
 
     locations = []
     for loc in results:
@@ -81,64 +89,56 @@ def discover_dhaka_locations() -> list[dict]:
         if lat is None or lon is None:
             continue
         # Filter to Dhaka bounding box
-        if (DHAKA_BBOX["lat_min"] <= lat <= DHAKA_BBOX["lat_max"] and
+        if not (DHAKA_BBOX["lat_min"] <= lat <= DHAKA_BBOX["lat_max"] and
                 DHAKA_BBOX["lon_min"] <= lon <= DHAKA_BBOX["lon_max"]):
-            locations.append({
-                "location_id": loc.get("id"),
-                "name": loc.get("name", f"station_{loc.get('id')}"),
-                "latitude": lat,
-                "longitude": lon,
-            })
+            continue
+
+        sensors = [
+            {"sensor_id": s.get("id"), "parameter": s.get("parameter", {}).get("name")}
+            for s in loc.get("sensors", [])
+            if s.get("parameter", {}).get("name") in POLLUTANTS and s.get("id") is not None
+        ]
+        if not sensors:
+            continue  # no sensor for any pollutant we track
+
+        locations.append({
+            "location_id": loc.get("id"),
+            "name": loc.get("name", f"station_{loc.get('id')}"),
+            "latitude": lat,
+            "longitude": lon,
+            "sensors": sensors,
+        })
 
     if not locations:
-        print("[ingest] No stations inside bounding box, using fallback.")
-        return _fallback_dhaka_stations()
+        print("[ingest] No stations inside bounding box report a tracked pollutant.")
+        return []
 
     print(f"[ingest] Found {len(locations)} station(s) in Dhaka metro area.")
     for s in locations:
+        params_str = ", ".join(sorted({sn["parameter"] for sn in s["sensors"]}))
         print(f"         • {s['name']} (id={s['location_id']}, "
-              f"{s['latitude']:.4f}, {s['longitude']:.4f})")
+              f"{s['latitude']:.4f}, {s['longitude']:.4f}) — {params_str}")
     return locations
 
 
-def _fallback_dhaka_stations() -> list[dict]:
-    """Hard-coded known Dhaka stations (US Embassy + CASE references).
-
-    Used when the API is unreachable or returns no results.
-    """
-    return [
-        {"location_id": 222094, "name": "US Diplomatic Post: Dhaka",
-         "latitude": 23.7964, "longitude": 90.4243},
-        {"location_id": 2796, "name": "Dhaka - CASE",
-         "latitude": 23.7260, "longitude": 90.3890},
-        {"location_id": 236353, "name": "Dhaka - Dhanmondi",
-         "latitude": 23.7465, "longitude": 90.3760},
-        {"location_id": 233592, "name": "Dhaka - Gulshan",
-         "latitude": 23.7925, "longitude": 90.4150},
-    ]
-
-
-def fetch_measurements(location_id: int, date_from: str, date_to: str,
-                        parameter_id: int) -> list[dict]:
-    """Fetch paginated measurements for one station + one parameter.
+def fetch_sensor_measurements(sensor_id: int, date_from: str, date_to: str) -> list[dict]:
+    """Fetch paginated hourly measurements for one OpenAQ v3 sensor.
 
     Parameters
     ----------
-    location_id : int
-    date_from, date_to : str   ISO-8601 date strings (YYYY-MM-DD)
-    parameter_id : int         OpenAQ parameter numeric ID
+    sensor_id : int             OpenAQ sensor ID (specific to one station + parameter)
+    date_from, date_to : str    ISO-8601 date strings (YYYY-MM-DD)
 
     Returns
     -------
     list[dict]  Raw measurement records.
     """
-    url = f"{OPENAQ_BASE_URL}/locations/{location_id}/measurements"
+    url = f"{OPENAQ_BASE_URL}/sensors/{sensor_id}/measurements/hourly"
     all_records = []
     page = 1
 
     while True:
         params = {
-            "parameters_id": parameter_id,
             "date_from": date_from,
             "date_to": date_to,
             "limit": OPENAQ_PAGE_LIMIT,
@@ -149,8 +149,7 @@ def fetch_measurements(location_id: int, date_from: str, date_to: str,
             resp.raise_for_status()
             data = resp.json()
         except requests.RequestException as exc:
-            print(f"  [fetch] Page {page} failed for location {location_id}, "
-                  f"param {parameter_id}: {exc}")
+            print(f"  [fetch] Page {page} failed for sensor {sensor_id}: {exc}")
             break
 
         results = data.get("results", [])
@@ -165,7 +164,7 @@ def fetch_measurements(location_id: int, date_from: str, date_to: str,
 
         # Safety cap — don't loop forever
         if page > 500:
-            print(f"  [fetch] Reached page cap (500) for location {location_id}")
+            print(f"  [fetch] Reached page cap (500) for sensor {sensor_id}")
             break
 
     return all_records
@@ -175,22 +174,27 @@ def fetch_measurements(location_id: int, date_from: str, date_to: str,
 
 def ingest_all_stations(locations: list[dict],
                         date_from: str, date_to: str) -> pd.DataFrame:
-    """Pull all pollutants for all stations and return a flat pandas DataFrame.
+    """Pull all tracked pollutants for all stations and return a flat
+    pandas DataFrame.
 
     Each row: station_id, station_name, latitude, longitude, timestamp,
               parameter, value, unit
+
+    Iterates per-sensor (each OpenAQ v3 sensor is one station + one
+    parameter) rather than assuming every station has every pollutant.
     """
     rows = []
-    total = len(locations) * len(POLLUTANTS)
+    total = sum(len(loc["sensors"]) for loc in locations)
     counter = 0
 
     for loc in locations:
-        for poll_key, poll_info in OPENAQ_PARAMETER_MAP.items():
+        for sensor in loc["sensors"]:
             counter += 1
+            poll_key = sensor["parameter"]
             print(f"[ingest] ({counter}/{total}) Station '{loc['name']}' — "
-                  f"parameter {poll_key} …")
-            records = fetch_measurements(
-                loc["location_id"], date_from, date_to, poll_info["id"]
+                  f"parameter {poll_key} (sensor {sensor['sensor_id']}) …")
+            records = fetch_sensor_measurements(
+                sensor["sensor_id"], date_from, date_to
             )
             for rec in records:
                 period = rec.get("period", {})
@@ -198,6 +202,8 @@ def ingest_all_stations(locations: list[dict],
                 val = rec.get("value")
                 if dt_local is None or val is None:
                     continue
+                unit = rec.get("parameter", {}).get("units") or \
+                    OPENAQ_PARAMETER_MAP.get(poll_key, {}).get("unit", "")
                 rows.append({
                     "station_id": str(loc["location_id"]),
                     "station_name": loc["name"],
@@ -206,15 +212,30 @@ def ingest_all_stations(locations: list[dict],
                     "timestamp": dt_local,
                     "parameter": poll_key,
                     "value": float(val),
-                    "unit": poll_info["unit"],
+                    "unit": unit,
                 })
             print(f"         → {len(records)} records")
 
     df = pd.DataFrame(rows)
     if df.empty:
         print("[ingest] WARNING: No data returned from any station!")
-    else:
-        print(f"[ingest] Total raw records: {len(df):,}")
+        return df
+
+    # The /sensors/{id}/measurements/hourly endpoint does not reliably
+    # honor date_from/date_to server-side — some sensors return their full
+    # multi-year history regardless. Enforce the requested window here so
+    # downstream stages (weather join, etc.) see the range they asked for.
+    df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
+    window_start = pd.Timestamp(date_from, tz="UTC")
+    window_end = pd.Timestamp(date_to, tz="UTC") + pd.Timedelta(days=1)
+    before = len(df)
+    df = df[(df["timestamp"] >= window_start) & (df["timestamp"] < window_end)].copy()
+    if len(df) != before:
+        print(f"[ingest] Clamped to requested window {date_from} → {date_to}: "
+              f"{before:,} → {len(df):,} records")
+    df["timestamp"] = df["timestamp"].astype(str)
+
+    print(f"[ingest] Total raw records: {len(df):,}")
     return df
 
 
@@ -273,9 +294,12 @@ def save_as_parquet(wide_pdf: pd.DataFrame) -> None:
     # Convert to Spark DataFrame
     sdf = spark.createDataFrame(wide_pdf)
 
-    # Derive partition columns
+    # Derive partition columns. station_id is force-cast to string — Spark's
+    # partition-column type inference on read can otherwise treat an
+    # all-numeric station_id as a double (e.g. "6240023" -> 6240023.0).
     sdf = (
         sdf
+        .withColumn("station_id", F.col("station_id").cast("string"))
         .withColumn("date", F.to_date("timestamp"))
         .withColumn("year", F.year("date"))
         .withColumn("month", F.month("date"))
@@ -326,6 +350,10 @@ def main():
 
     # Step 1: Discover stations
     locations = discover_dhaka_locations()
+    if not locations:
+        print("[ingest] Aborting — no live Dhaka stations found. "
+              "Run pyspark/mock_ingest.py for offline development instead.")
+        return
 
     # Step 2: Fetch measurements for all stations & pollutants
     raw_df = ingest_all_stations(locations, date_from, date_to)

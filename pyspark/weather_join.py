@@ -57,12 +57,26 @@ def fetch_weather_for_station(lat: float, lon: float,
         "timezone": "UTC",
     }
 
-    try:
-        resp = requests.get(OPEN_METEO_URL, params=params, timeout=60)
-        resp.raise_for_status()
-        data = resp.json()
-    except requests.RequestException as exc:
-        print(f"  [weather] Open-Meteo request failed ({lat}, {lon}): {exc}")
+    data = None
+    backoffs = [5, 15, 30]
+    for attempt, delay in enumerate([0] + backoffs):
+        if delay:
+            print(f"  [weather] Rate-limited ({lat:.4f}, {lon:.4f}) — "
+                  f"retrying in {delay}s …")
+            time.sleep(delay)
+        try:
+            resp = requests.get(OPEN_METEO_URL, params=params, timeout=60)
+            if resp.status_code == 429:
+                continue
+            resp.raise_for_status()
+            data = resp.json()
+            break
+        except requests.RequestException as exc:
+            print(f"  [weather] Open-Meteo request failed ({lat}, {lon}): {exc}")
+            return pd.DataFrame()
+
+    if data is None:
+        print(f"  [weather] Gave up after repeated 429s ({lat:.4f}, {lon:.4f})")
         return pd.DataFrame()
 
     hourly = data.get("hourly", {})
@@ -85,42 +99,47 @@ def load_openaq_parquet() -> SparkDataFrame:
     spark = get_spark()
     path = str(OPENAQ_PARQUET_DIR)
     sdf = spark.read.parquet(path)
+    # Partitioned-Parquet partition-column type inference can turn a purely
+    # numeric station_id into DoubleType on read (e.g. "6240023" -> 6240023.0);
+    # round-trip through long to strip any spurious ".0" before it's used as
+    # a join key or string identifier anywhere downstream.
+    sdf = sdf.withColumn("station_id", F.col("station_id").cast("long").cast("string"))
     print(f"[weather_join] Loaded OpenAQ data: {sdf.count():,} rows, "
           f"{sdf.select('station_id').distinct().count()} stations")
     return sdf
 
 
 def enrich_with_weather(sdf: SparkDataFrame) -> SparkDataFrame:
-    """Fetch weather for each unique station and join by timestamp.
+    """Fetch weather for each unique station (over that station's own
+    observed date range) and join by timestamp.
 
     Uses a broadcast join since weather data per station is relatively small.
     """
     spark = get_spark()
 
-    # Get unique station coordinates
+    # Per-station coordinates + observed date range (stations can have very
+    # different reporting histories — fetching each one's own range keeps
+    # requests small instead of pulling every station over the widest span).
     stations = (
-        sdf.select("station_id", "latitude", "longitude")
-        .distinct()
+        sdf.groupBy("station_id")
+        .agg(
+            F.first("latitude").alias("latitude"),
+            F.first("longitude").alias("longitude"),
+            F.min("timestamp").alias("min_ts"),
+            F.max("timestamp").alias("max_ts"),
+        )
         .toPandas()
     )
-
-    # Determine date range from the pollution data
-    date_range = sdf.select(
-        F.min("timestamp").alias("min_ts"),
-        F.max("timestamp").alias("max_ts"),
-    ).first()
-
-    date_from = str(date_range["min_ts"].date())
-    date_to = str(date_range["max_ts"].date())
-    print(f"[weather_join] Date range: {date_from} → {date_to}")
 
     all_weather_dfs = []
     for _, row in stations.iterrows():
         sid = row["station_id"]
         lat = row["latitude"]
         lon = row["longitude"]
+        date_from = str(row["min_ts"].date())
+        date_to = str(row["max_ts"].date())
         print(f"[weather_join] Fetching weather for station {sid} "
-              f"({lat:.4f}, {lon:.4f}) …")
+              f"({lat:.4f}, {lon:.4f}) — {date_from} → {date_to} …")
 
         wdf = fetch_weather_for_station(lat, lon, date_from, date_to)
         if wdf.empty:
@@ -129,7 +148,7 @@ def enrich_with_weather(sdf: SparkDataFrame) -> SparkDataFrame:
 
         wdf["station_id"] = str(sid)
         all_weather_dfs.append(wdf)
-        time.sleep(0.3)  # politeness
+        time.sleep(1.0)  # politeness — avoid Open-Meteo rate limiting
 
     if not all_weather_dfs:
         print("[weather_join] WARNING: No weather data for any station!")

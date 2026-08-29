@@ -1,0 +1,13 @@
+station_id,station_name,rows,date_from,date_to,days_span,pm25_coverage_%,pm10_coverage_%,no2_coverage_%,o3_coverage_%,so2_coverage_%,co_coverage_%
+6157905,"RAJUK Uttara Apartment Project, Sector - 18, Uttara",4323,2026-03-02,2026-08-29,181,100.0,0.0,0.0,0.0,0.0,0.0
+6234363,Gulshan Society Lake Park | Dhaka | Smart Air Bangladesh,4062,2026-03-02,2026-08-29,181,100.0,0.0,0.0,0.0,0.0,0.0
+6236590,"Hazaribagh, Jigatola | Dhaka | Smart Air Bangladesh",4240,2026-03-02,2026-08-29,181,100.0,0.0,0.0,0.0,0.0,0.0
+6240023,"Dhanmondi, Road No. 7 | Dhaka l Smart Air Bangladesh",3650,2026-03-02,2026-08-13,165,100.0,0.0,0.0,0.0,0.0,0.0
+6240773,"North Badda, Abdullahbag | Dhaka l Smart Air Bangladesh",3729,2026-03-02,2026-08-09,161,100.0,0.0,0.0,0.0,0.0,0.0
+6242079,Moghbazar; Bhodro Goli | Dhaka | Smart Air Bangladesh,4254,2026-03-02,2026-08-29,181,100.0,0.0,0.0,0.0,0.0,0.0
+6242232,"Baridhara, Park Road | Dhaka l Smart Air Bangladesh",4019,2026-03-02,2026-08-29,181,100.0,0.0,0.0,0.0,0.0,0.0
+6251395,"Mirpur, Shewrapara | Dhaka | Smart Air Bangladesh",730,2026-03-02,2026-08-17,169,100.0,0.0,0.0,0.0,0.0,0.0
+6271076,Baridhara Lakeside,3490,2026-03-14,2026-08-29,169,100.0,0.0,0.0,0.0,0.0,0.0
+6313504,Sensor No -01,5,2026-04-19,2026-04-26,7,100.0,0.0,0.0,0.0,0.0,0.0
+6322838,Sensor No -03,4,2026-04-26,2026-04-26,1,100.0,0.0,0.0,0.0,0.0,0.0
+6322839,Sensor No -04,3,2026-04-26,2026-04-26,1,100.0,0.0,0.0,0.0,0.0,0.0
