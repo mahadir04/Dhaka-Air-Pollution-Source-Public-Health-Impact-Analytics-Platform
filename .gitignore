@@ -1,11 +1,37 @@
-.env
-
-.venv/
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
-*.pyo
-*.pyd
-.ipynb_checkpoints/
-.pytest_cache/
-.mypy_cache/
+*$py.class
+
+# Virtual Environments
+.venv/
+venv/
+env/
+ENV/
+
+# Secrets & Environment Variables
+.env
+.env.*
+!.env.example
+
+# Large Data & Rasters (prevent exceeding GitHub file limits)
+*.tif
+*.tiff
+data/population/*.tif
+data/raw/
+
+# Spark / Hadoop / Checkpoints
+*.crc
+._SUCCESS.crc
+checkpoint/
+metastore_db/
+derby.log
+
+# Streamlit
+.streamlit/secrets.toml
+
+# IDE & System files
+.vscode/
+.idea/
 .DS_Store
+Thumbs.db

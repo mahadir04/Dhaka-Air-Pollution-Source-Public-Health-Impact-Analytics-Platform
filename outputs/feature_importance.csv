@@ -1,0 +1,8 @@
+feature,importance
+pm25_lag1,0.5025532
+pm25_roll24,0.20544913
+season_enc,0.07046095
+month,0.06901173
+hour,0.060130965
+pm25_lag24,0.04775382
+dow,0.04464013

@@ -1,0 +1,22 @@
+name,season,score_traffic,score_brick_kiln,score_biomass,score_construction,n_readings
+Baridhara Lakeside,Monsoon,0.21667580910586945,0.0,0.0,0.538891936368626,1823
+Baridhara Lakeside,Pre-Monsoon,0.20575884823035392,0.16788242351529675,0.0,0.5394121175764851,1667
+"Baridhara, Park Road | Dhaka l Smart Air Bangladesh",Monsoon,0.21445783132530122,0.0,0.0,0.5352771084337363,2075
+"Baridhara, Park Road | Dhaka l Smart Air Bangladesh",Pre-Monsoon,0.21193415637860083,0.1743955761316871,0.0,0.5338991769547335,1944
+"Dhanmondi, Road No. 7 | Dhaka l Smart Air Bangladesh",Monsoon,0.2063686466625842,0.0,0.0,0.5282914880587883,1633
+"Dhanmondi, Road No. 7 | Dhaka l Smart Air Bangladesh",Pre-Monsoon,0.21566683192860683,0.1594224095190876,0.0,0.528309370352009,2017
+Gulshan Society Lake Park | Dhaka | Smart Air Bangladesh,Monsoon,0.20717131474103587,0.0,0.0,0.5374003984063754,2008
+Gulshan Society Lake Park | Dhaka | Smart Air Bangladesh,Pre-Monsoon,0.20691333982473223,0.16689629990262908,0.0,0.5381207400194775,2054
+"Hazaribagh, Jigatola | Dhaka | Smart Air Bangladesh",Monsoon,0.2125,0.0,0.0,0.5329326923076936,2080
+"Hazaribagh, Jigatola | Dhaka | Smart Air Bangladesh",Pre-Monsoon,0.20925925925925926,0.17162499999999986,0.0,0.5342129629629645,2160
+"Mirpur, Shewrapara | Dhaka | Smart Air Bangladesh",Monsoon,0.1990521327014218,0.0,0.0,0.5436018957345973,211
+"Mirpur, Shewrapara | Dhaka | Smart Air Bangladesh",Pre-Monsoon,0.2119460500963391,0.20184971098265864,0.0,0.5269749518304423,519
+Moghbazar; Bhodro Goli | Dhaka | Smart Air Bangladesh,Monsoon,0.21168224299065422,0.0,0.0,0.533831775700938,2140
+Moghbazar; Bhodro Goli | Dhaka | Smart Air Bangladesh,Pre-Monsoon,0.2109744560075686,0.17206480605487215,0.0,0.5325449385052068,2114
+"North Badda, Abdullahbag | Dhaka l Smart Air Bangladesh",Monsoon,0.2134484885872918,0.0,0.0,0.5330043183220248,1621
+"North Badda, Abdullahbag | Dhaka l Smart Air Bangladesh",Pre-Monsoon,0.20872865275142316,0.17096299810246662,0.0,0.5310721062618609,2108
+"RAJUK Uttara Apartment Project, Sector - 18, Uttara",Monsoon,0.21172638436482086,0.0,0.0,0.5332247557003272,2149
+"RAJUK Uttara Apartment Project, Sector - 18, Uttara",Pre-Monsoon,0.20791168353265868,0.17051977920883152,0.0,0.533394664213433,2174
+Sensor No -01,Pre-Monsoon,0.0,0.8649999999999999,0.0,0.78,5
+Sensor No -03,Pre-Monsoon,0.0,0.8612499999999998,0.0,0.725,4
+Sensor No -04,Pre-Monsoon,0.0,0.8549999999999999,0.0,0.6333333333333333,3

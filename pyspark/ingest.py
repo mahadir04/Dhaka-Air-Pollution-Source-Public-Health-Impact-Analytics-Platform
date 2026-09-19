@@ -40,10 +40,10 @@ from utils.spark_session import get_spark
 
 def _headers() -> dict:
     """Build request headers with API key."""
-    h = {"Accept": "application/json"}
-    if OPENAQ_API_KEY and OPENAQ_API_KEY != "YOUR_OPENAQ_API_KEY_HERE":
-        h["X-API-Key"] = OPENAQ_API_KEY
-    return h
+    key = os.environ.get("OPENAQ_API_KEY") or OPENAQ_API_KEY
+    if not key or key == "YOUR_OPENAQ_API_KEY_HERE":
+        key = "115b43ac5567097478ed2f6bcf0b867229426df832772d499f589c45211ff213"
+    return {"Accept": "application/json", "X-API-Key": key}
 
 
 def discover_dhaka_locations() -> list[dict]:

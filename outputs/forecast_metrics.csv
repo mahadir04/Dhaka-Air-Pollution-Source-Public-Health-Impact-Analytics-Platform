@@ -1,0 +1,2 @@
+model,rmse,mae,r2,n_train,n_test,features
+XGBoost,9.646,6.943,0.4556,3438,860,"['pm25_lag1', 'pm25_lag24', 'pm25_roll24', 'hour', 'dow', 'month', 'season_enc']"

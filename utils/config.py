@@ -38,16 +38,19 @@ POPULATION_DIR     = DATA_DIR / "population"
 FIGURES_DIR        = PROJECT_ROOT / "figures"
 DOCS_DIR           = PROJECT_ROOT / "docs"
 REPORTS_DIR        = PROJECT_ROOT / "reports"
+OUTPUTS_DIR        = PROJECT_ROOT / "outputs"
+MODEL_DIR          = OUTPUTS_DIR / "model"
+MODEL_SKLEARN_DIR  = OUTPUTS_DIR / "model_sklearn"
 
 # Ensure key directories exist
 for d in [RAW_DIR, OPENAQ_PARQUET_DIR, WEATHER_PARQUET_DIR, POPULATION_PARQUET_DIR,
           CLEANED_PARQUET_DIR, POPULATION_DIR, FIGURES_DIR,
-          DOCS_DIR, REPORTS_DIR]:
+          DOCS_DIR, REPORTS_DIR, OUTPUTS_DIR, MODEL_DIR, MODEL_SKLEARN_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
 # ─────────────────────────── API keys ────────────────────────────────────────
 # Set your OpenAQ API key as an environment variable or replace the placeholder.
-OPENAQ_API_KEY = os.environ.get("OPENAQ_API_KEY", "YOUR_OPENAQ_API_KEY_HERE")
+OPENAQ_API_KEY = os.environ.get("OPENAQ_API_KEY", "115b43ac5567097478ed2f6bcf0b867229426df832772d499f589c45211ff213")
 
 # ─────────────────────────── OpenAQ settings ─────────────────────────────────
 OPENAQ_BASE_URL = "https://api.openaq.org/v3"

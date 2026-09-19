@@ -57,33 +57,43 @@ It's a **data analytics platform**, built primarily to demonstrate distributed d
 
 ## 🏗 System Architecture
 
-```text
-OpenAQ API (multi-station, multi-pollutant, Dhaka)
+```
+        OpenAQ API (multi-station, multi-pollutant, Dhaka)
                           │
                           ▼
-Weather Enrichment (temperature, humidity, wind speed/direction, pressure)
+             Weather Enrichment (temperature,
+          humidity, wind speed/direction, pressure)
                           │
                           ▼
-Population Data (LandScan Global / census, ward-level)
+        Population Data (WorldPop / census, ward-level)
                           │
                           ▼
-PySpark Ingestion & Preprocessing
-(cleaning, imputation, outlier handling, joins)
+             PySpark Ingestion & Preprocessing
+       (cleaning, imputation, outlier handling, joins)
                           │
                           ▼
-Source-Signature Analysis (Spark SQL)
-(temporal fingerprint matching: brick kilns, traffic, construction, biomass burning)
+              Source-Signature Analysis (Spark SQL)
+     (temporal fingerprint matching: brick kilns, traffic,
+        construction, biomass burning)
                           │
                           ▼
-Population-Weighted Exposure Calculation
-(pollutant concentration × population in catchment)
+           Population-Weighted Exposure Calculation
+        (pollutant concentration × population in catchment)
                           │
                           ▼
-Health Burden Estimation
-(published concentration-response coefficients applied)
+             Health Burden Estimation
+   (published concentration-response coefficients applied
+     to compute estimated attributable risk per area/season)
                           │
                           ▼
-Comparative Ranking (areas & seasons by estimated health burden)
+        Comparative Ranking (areas & seasons by
+              estimated health burden)
+                          │
+              ┌───────────┴───────────┐
+              ▼                       ▼
+   Health-Risk Dashboard      (Secondary) Short-Term
+   (Streamlit)                 Forecasting Module
+                                (Spark MLlib, GBT/RF)
 ```
 
 ---
@@ -94,7 +104,7 @@ Comparative Ranking (areas & seasons by estimated health burden)
 |---|---|
 | **Distributed compute** | Apache Spark, PySpark, Spark SQL, Window functions, MLlib |
 | **Language** | Python 3.10+ |
-| **Population data** | LandScan Global gridded population rasters, or Bangladesh census ward-level tables |
+| **Population data** | WorldPop gridded population rasters, or Bangladesh census ward-level tables |
 | **Health burden methodology** | Published concentration-response coefficients (WHO Global Air Quality Guidelines, peer-reviewed cohort studies) |
 | **ML (secondary forecasting)** | Gradient Boosted Trees, Random Forest (Spark MLlib) |
 | **Visualization** | Plotly, Folium (choropleth health-risk map), Matplotlib |
@@ -126,43 +136,123 @@ Comparative Ranking (areas & seasons by estimated health burden)
 | Wind speed / direction | m/s, 0–360° | Distinguishing local emission vs. wind-transported pollution |
 | Atmospheric pressure | hPa | Seasonal pattern context |
 
-### 4. Population Data
+Source: Open-Meteo / NOAA historical hourly API, joined by nearest-coordinate + timestamp match.
+
+### 4. Population Data (new — enables health-impact framing)
 | Source | Description |
 |---|---|
-| LandScan Global | ORNL ambient-population density rasters, ~1km resolution, requires free registration to download |
+| WorldPop | Free gridded population density rasters, ~100m resolution, usable for Dhaka |
 | Bangladesh census (BBS) | Ward-level population figures, alternative/validation source |
 
+Used to compute population-weighted exposure — pollutant concentration alone doesn't say how many people are affected; this join does.
+
 ### 5. Health Burden Reference Coefficients
+Published, peer-reviewed concentration-response relationships are applied (not derived) to translate pollutant concentrations into estimated health risk:
+
 | Source | Finding used |
 |---|---|
 | WHO Global Air Quality Guidelines (2021) | Meta-analytic short-term concentration-response functions for PM2.5/PM10 and mortality |
-| Orellano et al. (2020) | ~0.4% increase in all-cause mortality per 10 µg/m³ rise in PM10 |
-| Pope et al. | ~8% increase in long-term mortality risk per 10 µg/m³ rise in PM2.5 |
-| India difference-in-differences study (2024) | ~8.6% higher annual mortality per 10 µg/m³ rise in annual PM2.5 |
+| Orellano et al. (2020), cited in WHO AQG | ~0.4% increase in all-cause mortality per 10 µg/m³ rise in PM10 (short-term, linear CRF) |
+| American Cancer Society cohort study (Pope et al.) | ~8% increase in long-term mortality risk per 10 µg/m³ rise in PM2.5 |
+| India difference-in-differences study (2024) | ~8.6% higher annual mortality per 10 µg/m³ rise in annual PM2.5, in a comparable South Asian context |
+
+These coefficients are applied as standard attributable-risk calculations (a well-established epidemiological method), not as project-original findings — full citations included in the final report.
+
+### Unified Schema (post-join, pre-analysis)
+
+| Column | Type | Description |
+|---|---|---|
+| `station_id` | string | OpenAQ station identifier |
+| `latitude` / `longitude` | float | Station coordinates |
+| `timestamp` | timestamp | Reading time (UTC) |
+| `pm25`, `pm10`, `no2`, `o3`, `so2`, `co` | float | Pollutant concentrations |
+| `temperature`, `humidity`, `wind_speed`, `wind_direction`, `pressure` | float | Weather enrichment |
+| `population_catchment` | int | Estimated population in the station's catchment area |
+| `exposure_score` | float | Pollutant concentration × population_catchment |
+| `source_signature` | string | Diagnosed likely dominant source (traffic / brick_kiln / construction / biomass / mixed) |
+| `attributable_risk_pct` | float | Estimated excess health risk vs. WHO guideline baseline, from applied CRF coefficients |
+
+### Data Quality Handling
+- **Missing values:** forward-fill within-station, falling back to station-level hourly median if a gap exceeds 3 hours
+- **Outliers:** IQR-based clipping per pollutant, per station
+- **Deduplication:** on `(station_id, timestamp)`
+- **Pagination:** OpenAQ API results are paginated (up to 1000/page); ingestion loops through pages per station per date range
 
 ---
 
 ## 🔬 Core Methodology
 
 ### 1. Data Aggregation (PySpark)
-Multi-station OpenAQ pulls are unioned and pivoted to wide format, joined with weather and population data.
+Multi-station OpenAQ pulls are unioned and pivoted to wide format (`groupBy().pivot().agg()`), joined with weather via broadcast join, and joined with population data by nearest station/grid-cell.
 
 ### 2. Source-Signature Analysis (diagnostic)
-Temporal/pollutant patterns are matched against known Dhaka emission activity calendars using Spark SQL aggregations.
+Temporal/pollutant patterns are matched against known Dhaka emission activity calendars using Spark SQL aggregations:
+- **Brick kilns** — SO₂ elevation concentrated in the Nov–Mar dry season (Dhaka's documented dominant SO₂ source)
+- **Traffic** — NO₂ spikes at rush hours (7–9am, 5–8pm), weekday-heavy
+- **Biomass/open burning** — PM2.5 spikes without matching NO₂ rise
+- **Construction dust** — PM10-dominant elevation without matching gas pollutant rise, weekday pattern
+
+This is rule-based diagnostic pattern-matching over grouped aggregations — standard analytics, not a causal-inference algorithm.
 
 ### 3. Population-Weighted Exposure
-```text
+```
 exposure_score(station, time) = pollutant_concentration × population_in_catchment
 ```
+Computed via a Spark join between station readings and population raster/table data.
 
 ### 4. Health Burden Estimation
-Published concentration-response coefficients are applied to compute estimated attributable risk percentage per station/area/season relative to the WHO guideline baseline.
+Published concentration-response coefficients (see Dataset section above) are applied to compute an estimated attributable risk percentage per station/area/season relative to the WHO guideline baseline — the project's core analytical contribution.
 
 ### 5. Comparative Ranking
-Areas and seasons are ranked by estimated health burden, not raw pollution.
+Areas and seasons are ranked by **estimated health burden** (`exposure_score × attributable_risk_pct`), not raw pollution — surfacing where harm is concentrated, which may differ from where pollution alone is highest.
 
 ### 6. (Secondary) Short-Term Forecasting
-A lightweight Gradient Boosted Trees / Random Forest regression model (Spark MLlib) is used for a supporting forecasting module.
+A lightweight Gradient Boosted Trees / Random Forest regression model (Spark MLlib), using lag and rolling-average features via Window functions, forecasts next-hour/next-day PM2.5 — kept as a supporting module, not the project's headline.
+
+---
+
+## 📊 Pipeline Summary
+
+```
+OpenAQ multi-station ingestion → weather join → population join → cleaning
+   → source-signature analysis → population-weighted exposure
+   → health burden estimation (CRF coefficients applied)
+   → comparative ranking → (secondary) short-term forecasting
+   → Streamlit dashboard (health-risk map + forecasting tab)
+```
+
+## 📈 Evaluation Metrics
+
+| Task | Metrics |
+|---|---|
+| Source-signature analysis | Manual/expert validation of assigned signatures against known seasonal source activity |
+| Health burden estimation | Sensitivity analysis across the range of published CRF coefficients (report a range, not a single point estimate) |
+| Secondary forecasting | RMSE, MAE, R² |
+
+---
+
+## 📋 Project Structure
+
+```
+Dhaka-Air-Health-Analytics/
+│
+├── data/                  # Raw + processed OpenAQ, population, and Kaggle data
+├── notebooks/             # Colab exploration & prototyping
+├── pyspark/               # Ingestion, preprocessing, joins
+├── source_analysis/       # Source-signature diagnostic scripts
+├── exposure/              # Population-weighted exposure calculation
+├── health_burden/         # CRF coefficient application, attributable risk calc
+├── ranking/               # Comparative area/season ranking
+├── forecasting/           # Secondary short-term forecasting module
+├── dashboard/             # Streamlit app
+├── utils/                 # Config, logging, helpers
+├── docs/                  # Methodology notes, CRF coefficient citations
+├── figures/               # Generated plots/maps
+├── reports/               # Evaluation reports
+├── requirements.txt
+├── README.md
+└── LICENSE
+```
 
 ---
 
@@ -171,33 +261,72 @@ A lightweight Gradient Boosted Trees / Random Forest regression model (Spark MLl
 ### Prerequisites
 - Python 3.10+
 - Java 8/11 (required by Spark)
-- OpenAQ API key (free)
+- OpenAQ API key (free — register at explore.openaq.org/register)
 
 ### Installation
 
 ```bash
-git clone https://github.com/mahadir04/Dhaka-Air-Pollution-Source-Public-Health-Impact-Analytics-Platform.git
-cd Dhaka-Air-Pollution-Source-Public-Health-Impact-Analytics-Platform
+git clone https://github.com/<your-username>/Dhaka-Air-Health-Analytics.git
+cd Dhaka-Air-Health-Analytics
 
-python -m venv .venv
-source .venv/bin/activate      # Windows: .venv\Scripts\activate
+python -m venv venv
+source venv/bin/activate      # Windows: venv\Scripts\activate
 
 pip install -r requirements.txt
+```
+
+### `requirements.txt` (core)
+```
+pyspark==3.5.1
+scikit-learn
+pandas
+numpy
+rasterio
+plotly
+folium
+matplotlib
+streamlit
+requests
 ```
 
 ### Run the pipeline
 
 ```bash
+# 1. Fetch multi-station OpenAQ data
 python pyspark/ingest.py --source openaq --city dhaka --days 365
+
+# 2. Fetch and join weather + population data
 python pyspark/weather_join.py
 python pyspark/population_join.py --source worldpop
+
+# 3. Preprocess
 python pyspark/preprocess.py
+
+# 4. Run source-signature analysis
 python source_analysis/detect_signatures.py
+
+# 5. Compute population-weighted exposure
 python exposure/compute_exposure.py
+
+# 6. Estimate health burden
 python health_burden/apply_crf.py
+
+# 7. Rank areas/seasons
 python ranking/rank_health_burden.py
-python forecasting/train_regression.py --model gbt
+
+# 8. Run end-to-end pipeline (stages 4-7 + forecasting export)
+python run_pipeline.py
+
+# 9. Launch Real-Time Air Quality Intelligence Platform (Live OpenAQ + Open-Meteo)
+streamlit run app.py
+
+# 10. Or launch Multi-Page Diagnostic & Health Analytics Dashboard
 streamlit run dashboard/app.py
+```
+
+### Quick Retraining (Standalone Forecaster)
+```bash
+python train.py
 ```
 
 ---
@@ -206,20 +335,62 @@ streamlit run dashboard/app.py
 
 - Multi-station, multi-pollutant Dhaka air quality dataset assembled via PySpark
 - Rule-based source-signature diagnostics matching pollution patterns to known Dhaka emission activity
-- Population-weighted exposure calculation
-- Application of published epidemiological concentration-response coefficients to estimate attributable health burden
-- Health-burden-based area and seasonal ranking
-- A lightweight secondary forecasting module retained to demonstrate Spark MLlib competency
+- Population-weighted exposure calculation — pollution levels weighted by who's actually affected
+- Application of published epidemiological concentration-response coefficients to estimate attributable health burden, grounded in WHO and peer-reviewed cohort evidence
+- Health-burden-based (not raw-pollution-based) area and seasonal ranking, directly relevant to policy prioritization
+- A lightweight, clearly secondary forecasting module retained to demonstrate Spark MLlib competency
+
+---
+
+## 📚 Related & Base Papers
+
+### Dhaka / Bangladesh-specific studies
+
+| Paper | Approach | Gap this project addresses |
+|---|---|---|
+| *Air Quality Prediction and Public Health Risk Assessment: Dhaka and Rajshahi* — SARIMA, XGBoost, RF, LSTM forecasting through 2030 | Forecasting + health-risk framing | Frames health risk qualitatively; this project quantifies it via applied CRF coefficients and population weighting |
+| *Comprehensive Analysis of Air Pollution in Dhaka + AI/ML* | Source attribution (brick kilns, traffic, construction) | Strong source framing but not paired with population-weighted health burden estimation |
+| Begum, Biswas & Hopke (2011), *Key issues in controlling air pollutants in Dhaka* | Identifies brick kilns as Dhaka's dominant SO₂ source | Provides the empirical basis for this project's source-signature calendar, used as a diagnostic reference, not re-derived |
+| Rahman et al. (2022), *Respiratory ED visit associations with PM exposure in Dhaka* | Health-outcome association study, ground-truth for Dhaka health effects | This project doesn't have hospital-visit data, but structures its CRF-based estimation to be validated against studies like this in future work |
+
+### Health burden / epidemiological methodology
+
+| Source | Finding used |
+|---|---|
+| WHO Global Air Quality Guidelines (2021) | Concentration-response functions underpinning the health burden estimation methodology |
+| Orellano et al. (2020) systematic review | Linear CRF coefficient for PM10 short-term mortality risk |
+| Pope et al., American Cancer Society cohort study | Long-term PM2.5 mortality risk coefficient, widely used in global burden-of-disease work |
+| India difference-in-differences PM2.5 mortality study (2024) | Regional South Asian coefficient, useful as a comparison point to global WHO/ACS figures |
+
+### Big data / PySpark infrastructure
+
+| Paper | Approach | Gap this project addresses |
+|---|---|---|
+| *Design of a Spark Big Data Framework for PM2.5 Forecasting* (Taiwan LASS network) | First large-scale Spark-based PM2.5 pipeline | Confirms Spark's fit for this problem class; this project extends the analytics beyond forecasting into health burden estimation |
+| *An overview of air quality analysis by big data techniques* (review) | Classifies big-data air quality methods into monitoring/forecasting/traceability | Traceability (source attribution) is explicitly named as underdeveloped relative to forecasting — this project targets that gap |
+
+### Positioning summary
+No identified prior work combines PySpark-based multi-station/multi-pollutant aggregation, rule-based source-signature diagnostics, population-weighted exposure, and applied epidemiological health burden estimation into a single Dhaka-focused pipeline. Forecasting-heavy studies (Dhaka/Rajshahi ML work) don't quantify health burden; source-attribution studies don't weight by population or apply CRF coefficients; big-data/Spark papers are largely single-pollutant and forecasting-only.
+
+---
+
+## ⚠️ Known Limitations
+
+- Health burden estimates use **published, external** concentration-response coefficients, not coefficients derived from Dhaka-specific cohort data — results should be read as estimates under transferred risk assumptions, not as Dhaka-validated figures
+- Population data resolution (WorldPop ~100m grid or ward-level census) may not perfectly align with station catchment boundaries
+- Source-signature diagnostics are rule-based pattern matching against known activity calendars, not a formal source-apportionment model (e.g., no chemical mass balance or receptor modeling)
+- OpenAQ station density in Dhaka is limited, constraining spatial resolution of both exposure and health burden estimates
+- The secondary forecasting module is intentionally minimal and not the project's primary contribution
 
 ---
 
 ## 📚 Future Work
 
-- [ ] Validate estimated health burden against real hospital admission / respiratory ED visit data for Dhaka
-- [ ] Formalize source-signature diagnostics into a proper source-apportionment model
+- [ ] Validate estimated health burden against real hospital admission / respiratory ED visit data for Dhaka, where accessible
+- [ ] Formalize source-signature diagnostics into a proper source-apportionment model (e.g., Positive Matrix Factorization)
 - [ ] Refine population-weighting with higher-resolution local census data
-- [ ] Extend health burden estimation to morbidity outcomes
-- [ ] Compare estimated burden rankings against actual policy interventions
+- [ ] Extend health burden estimation to morbidity outcomes (hospital visits), not just mortality risk
+- [ ] Compare estimated burden rankings against actual policy interventions (e.g., seasonal brick kiln restrictions) to assess real-world alignment
 
 ---
 

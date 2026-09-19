@@ -1,0 +1,25 @@
+station,lat,lon,crf,crf_label,exposure_window,pollutant,mean_conc,who_baseline,delta_c,ar_pct,catchment_pop,attrib_deaths
+"RAJUK Uttara Apartment Project, Sector - 18, Uttara",23.856237,90.356837,pm25_long_term,PM2.5 Long-Term (Pope et al.),Annual,PM25,49.93,5.0,44.93,30.193,565486,1041.5
+"RAJUK Uttara Apartment Project, Sector - 18, Uttara",23.856237,90.356837,pm25_annual,PM2.5 Annual (India D-in-D 2024),Annual,PM25,49.93,5.0,44.93,32.05,565486,1105.6
+Gulshan Society Lake Park | Dhaka | Smart Air Bangladesh,23.801435,90.410545,pm25_long_term,PM2.5 Long-Term (Pope et al.),Annual,PM25,51.32,5.0,46.32,30.963,508938,961.2
+Gulshan Society Lake Park | Dhaka | Smart Air Bangladesh,23.801435,90.410545,pm25_annual,PM2.5 Annual (India D-in-D 2024),Annual,PM25,51.32,5.0,46.32,32.855,508938,1020.0
+"North Badda, Abdullahbag | Dhaka l Smart Air Bangladesh",23.7893016042,90.4318104177,pm25_long_term,PM2.5 Long-Term (Pope et al.),Annual,PM25,67.37,5.0,62.37,39.285,848230,2032.7
+"North Badda, Abdullahbag | Dhaka l Smart Air Bangladesh",23.7893016042,90.4318104177,pm25_annual,PM2.5 Annual (India D-in-D 2024),Annual,PM25,67.37,5.0,62.37,41.515,848230,2148.1
+"Hazaribagh, Jigatola | Dhaka | Smart Air Bangladesh",23.7404373694,90.3735836776,pm25_long_term,PM2.5 Long-Term (Pope et al.),Annual,PM25,51.54,5.0,46.54,31.088,1187522,2252.0
+"Hazaribagh, Jigatola | Dhaka | Smart Air Bangladesh",23.7404373694,90.3735836776,pm25_annual,PM2.5 Annual (India D-in-D 2024),Annual,PM25,51.54,5.0,46.54,32.986,1187522,2389.5
+"Baridhara, Park Road | Dhaka l Smart Air Bangladesh",23.8015,90.42206,pm25_long_term,PM2.5 Long-Term (Pope et al.),Annual,PM25,56.04,5.0,51.04,33.525,452389,925.1
+"Baridhara, Park Road | Dhaka l Smart Air Bangladesh",23.8015,90.42206,pm25_annual,PM2.5 Annual (India D-in-D 2024),Annual,PM25,56.04,5.0,51.04,35.53,452389,980.5
+"Dhanmondi, Road No. 7 | Dhaka l Smart Air Bangladesh",23.744966,90.383485,pm25_long_term,PM2.5 Long-Term (Pope et al.),Annual,PM25,49.78,5.0,44.78,30.111,989601,1817.6
+"Dhanmondi, Road No. 7 | Dhaka l Smart Air Bangladesh",23.744966,90.383485,pm25_annual,PM2.5 Annual (India D-in-D 2024),Annual,PM25,49.78,5.0,44.78,31.963,989601,1929.5
+Moghbazar; Bhodro Goli | Dhaka | Smart Air Bangladesh,23.7515250988,90.4041834681,pm25_long_term,PM2.5 Long-Term (Pope et al.),Annual,PM25,49.74,5.0,44.74,30.086,933053,1712.4
+Moghbazar; Bhodro Goli | Dhaka | Smart Air Bangladesh,23.7515250988,90.4041834681,pm25_annual,PM2.5 Annual (India D-in-D 2024),Annual,PM25,49.74,5.0,44.74,31.938,933053,1817.8
+Baridhara Lakeside,23.8058061304,90.4158053368,pm25_long_term,PM2.5 Long-Term (Pope et al.),Annual,PM25,49.94,5.0,44.94,30.198,452389,833.3
+Baridhara Lakeside,23.8058061304,90.4158053368,pm25_annual,PM2.5 Annual (India D-in-D 2024),Annual,PM25,49.94,5.0,44.94,32.055,452389,884.6
+"Mirpur, Shewrapara | Dhaka | Smart Air Bangladesh",23.787855,90.3728743,pm25_long_term,PM2.5 Long-Term (Pope et al.),Annual,PM25,72.34,5.0,67.34,41.653,1074424,2729.9
+"Mirpur, Shewrapara | Dhaka | Smart Air Bangladesh",23.787855,90.3728743,pm25_annual,PM2.5 Annual (India D-in-D 2024),Annual,PM25,72.34,5.0,67.34,43.963,1074424,2881.4
+Sensor No -01,23.780512,90.423122,pm25_long_term,PM2.5 Long-Term (Pope et al.),Annual,PM25,12.66,5.0,7.66,5.944,650309,235.8
+Sensor No -01,23.780512,90.423122,pm25_annual,PM2.5 Annual (India D-in-D 2024),Annual,PM25,12.66,5.0,7.66,6.375,650309,252.9
+Sensor No -03,23.785969,90.427902,pm25_long_term,PM2.5 Long-Term (Pope et al.),Annual,PM25,7.39,5.0,2.39,1.892,650309,75.0
+Sensor No -03,23.785969,90.427902,pm25_annual,PM2.5 Annual (India D-in-D 2024),Annual,PM25,7.39,5.0,2.39,2.032,650309,80.6
+Sensor No -04,23.823305,90.440429,pm25_long_term,PM2.5 Long-Term (Pope et al.),Annual,PM25,20.47,5.0,15.47,11.638,650309,461.7
+Sensor No -04,23.823305,90.440429,pm25_annual,PM2.5 Annual (India D-in-D 2024),Annual,PM25,20.47,5.0,15.47,12.455,650309,494.1

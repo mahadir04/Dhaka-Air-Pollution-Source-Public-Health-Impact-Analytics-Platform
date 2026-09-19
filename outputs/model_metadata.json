@@ -1,0 +1,23 @@
+{
+  "model_name": "XGBoost",
+  "model_kind": "sklearn",
+  "features": [
+    "pm25_lag1",
+    "pm25_lag24",
+    "pm25_roll24",
+    "hour",
+    "dow",
+    "month",
+    "season_enc"
+  ],
+  "target": "target",
+  "label": "Next-hour PM2.5 (\u00b5g/m\u00b3)",
+  "metrics": {
+    "rmse": 9.646,
+    "mae": 6.943,
+    "r2": 0.4556
+  },
+  "training_rows": 3438,
+  "test_rows": 860,
+  "model_path": "E:\\DA_project\\outputs\\model_sklearn\\model.joblib"
+}
