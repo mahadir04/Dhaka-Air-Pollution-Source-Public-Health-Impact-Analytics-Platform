@@ -14,6 +14,7 @@ Outputs:
   - dhaka_pm25_model.joblib: Serialized model, feature schema, and holdout evaluation metrics.
 """
 
+import json
 import os
 import sys
 
@@ -35,16 +36,27 @@ except Exception:
 from datetime import datetime, timedelta
 from pathlib import Path
 import joblib
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 
 try:
     from xgboost import XGBRegressor
     HAVE_XGBOOST = True
 except ImportError:
     HAVE_XGBOOST = False
-    from sklearn.ensemble import HistGradientBoostingRegressor
+
+try:
+    from lightgbm import LGBMRegressor
+    HAVE_LIGHTGBM = True
+except ImportError:
+    HAVE_LIGHTGBM = False
+
 
 
 # ── Project directories ──────────────────────────────────────────────────────
@@ -247,10 +259,10 @@ def train_and_evaluate_model():
     print(f"   Train set: {len(X_train):,} hours ({train_df['timestamp'].min().strftime('%Y-%m-%d')} to {train_df['timestamp'].max().strftime('%Y-%m-%d')})")
     print(f"   Test set:  {len(X_test):,} hours ({test_df['timestamp'].min().strftime('%Y-%m-%d')} to {test_df['timestamp'].max().strftime('%Y-%m-%d')})")
 
-    # 3. Model instantiation & training
+    # 3. Model instantiation & training candidates
+    candidates = {}
     if HAVE_XGBOOST:
-        print("\n🧠 Fitting XGBoost (XGBRegressor) with non-linear atmospheric interaction terms...")
-        model = XGBRegressor(
+        candidates["XGBoost"] = XGBRegressor(
             n_estimators=300,
             max_depth=6,
             learning_rate=0.05,
@@ -261,47 +273,131 @@ def train_and_evaluate_model():
             random_state=42,
             n_jobs=-1,
         )
-        model_name = "XGBoost (XGBRegressor)"
-    else:
-        print("\n🧠 Fitting HistGradientBoostingRegressor with non-linear interaction terms...")
-        model = HistGradientBoostingRegressor(
-            max_iter=300,
+    if HAVE_LIGHTGBM:
+        candidates["LightGBM"] = LGBMRegressor(
+            n_estimators=300,
             max_depth=6,
-            learning_rate=0.06,
-            min_samples_leaf=25,
-            l2_regularization=0.1,
+            learning_rate=0.05,
+            subsample=0.85,
+            colsample_bytree=0.85,
             random_state=42,
+            verbosity=-1,
         )
-        model_name = "HistGradientBoostingRegressor"
-    model.fit(X_train, y_train)
+    candidates["RandomForest"] = RandomForestRegressor(
+        n_estimators=100,
+        max_depth=8,
+        random_state=42,
+        n_jobs=-1,
+    )
+    candidates["GBT"] = GradientBoostingRegressor(
+        n_estimators=80,
+        max_depth=5,
+        learning_rate=0.1,
+        subsample=0.85,
+        random_state=42,
+    )
+    candidates["LinearRegression"] = LinearRegression()
 
-    # 4. Evaluation on holdout test set
-    preds = model.predict(X_test)
-    mae = mean_absolute_error(y_test, preds)
-    rmse = np.sqrt(mean_squared_error(y_test, preds))
-    r2 = r2_score(y_test, preds)
+    results = []
+    fitted_models = {}
+    predictions_map = {}
 
-    # Persistence baseline comparison
+    # 1. Naive Persistence Baseline
     naive_preds = test_df["pm25_lag1"].values
-    naive_mae = mean_absolute_error(y_test, naive_preds)
-    naive_rmse = np.sqrt(mean_squared_error(y_test, naive_preds))
-    naive_r2 = r2_score(y_test, naive_preds)
+    naive_mae = float(mean_absolute_error(y_test, naive_preds))
+    naive_rmse = float(np.sqrt(mean_squared_error(y_test, naive_preds)))
+    naive_r2 = float(r2_score(y_test, naive_preds))
+    results.append({
+        "model": "Persistence (naive)",
+        "rmse": naive_rmse,
+        "mae": naive_mae,
+        "r2": naive_r2,
+    })
+    predictions_map["Persistence (naive)"] = naive_preds
+    print(f"   Persistence (naive): RMSE={naive_rmse:.3f}  MAE={naive_mae:.3f}  R²={naive_r2:.4f}")
 
-    print("\n📈 Holdout Validation Results:")
-    print(f"   - {model_name}: MAE = {mae:.2f} µg/m³ | RMSE = {rmse:.2f} µg/m³ | R² = {r2:.4f}")
-    print(f"   - Naive Persistence:    MAE = {naive_mae:.2f} µg/m³ | RMSE = {naive_rmse:.2f} µg/m³ | R² = {naive_r2:.4f}")
-    improvement = ((naive_rmse - rmse) / naive_rmse) * 100
+    # 2. Fit and evaluate candidate models
+    for name, est in candidates.items():
+        print(f"🔄 Training {name}...")
+        est.fit(X_train, y_train)
+        preds = est.predict(X_test)
+        mae = float(mean_absolute_error(y_test, preds))
+        rmse = float(np.sqrt(mean_squared_error(y_test, preds)))
+        r2 = float(r2_score(y_test, preds))
+        results.append({
+            "model": name,
+            "rmse": rmse,
+            "mae": mae,
+            "r2": r2,
+        })
+        fitted_models[name] = est
+        predictions_map[name] = preds
+        print(f"   {name}: RMSE={rmse:.3f}  MAE={mae:.3f}  R²={r2:.4f}")
+
+    # 3. Model Comparison Benchmark Table
+    comparison_df = (
+        pd.DataFrame(results)[["model", "rmse", "mae", "r2"]]
+        .sort_values("rmse", ascending=True)
+        .reset_index(drop=True)
+    )
+
+    print("\n" + "=" * 65)
+    print("📊 Model Comparison Benchmark (Chronological Holdout):")
+    print("=" * 65)
+    print(comparison_df.to_string(index=False))
+    print("=" * 65)
+
+    # 4. Select the Winner
+    winner_row = comparison_df.iloc[0]
+    winner_name = winner_row["model"]
+    winner_model = fitted_models[winner_name]
+    improvement = ((naive_rmse - winner_row["rmse"]) / naive_rmse) * 100
+
+    print(f"\n🏆 Best Model Selected for Platform: {winner_name}")
+    print(f"   RMSE = {winner_row['rmse']:.3f} µg/m³ | MAE = {winner_row['mae']:.3f} µg/m³ | R² = {winner_row['r2']:.4f}")
     print(f"   ✨ RMSE Skill Improvement over Persistence: +{improvement:.1f}%")
 
-    # 5. Serialization
+    # 5. Save outputs & figures
+    outputs_dir = PROJECT_ROOT / "outputs"
+    figures_dir = PROJECT_ROOT / "figures"
+    outputs_dir.mkdir(parents=True, exist_ok=True)
+    figures_dir.mkdir(parents=True, exist_ok=True)
+
+    comparison_df.to_csv(outputs_dir / "model_comparison.csv", index=False)
+
+    # Generate comparison plot
+    fig, ax = plt.subplots(figsize=(8, 4.5), facecolor="#0f0c29")
+    ax.set_facecolor("#1a1a3e")
+    sorted_df = comparison_df.sort_values("rmse", ascending=False)
+    colors = ["#2ecc71" if m == winner_name else "#4facfe" for m in sorted_df["model"]]
+    bars = ax.barh(sorted_df["model"], sorted_df["rmse"], color=colors, edgecolor="none", height=0.6)
+    ax.set_xlabel("Test RMSE (µg/m³) — Lower is Better", color="#e0e0ff", fontsize=10)
+    ax.set_title(f"Dhaka PM2.5 Candidate Model Comparison (Winner: {winner_name})", color="#e8e8ff", fontsize=12, fontweight="bold")
+    ax.tick_params(colors="#e0e0ff", labelsize=9)
+    for spine in ax.spines.values():
+        spine.set_color("#3a3a60")
+    for bar in bars:
+        w = bar.get_width()
+        ax.text(w + 0.3, bar.get_y() + bar.get_height() / 2, f"{w:.2f}",
+                va='center', ha='left', color="#e0e0ff", fontsize=9, fontweight="bold")
+    fig.tight_layout()
+    fig.savefig(figures_dir / "model_comparison.png", dpi=150, facecolor=fig.get_facecolor())
+    plt.close(fig)
+
+    # Save test predictions for dashboard diagnostics
+    test_pred_df = test_df[["timestamp", "target"]].copy()
+    test_pred_df["prediction"] = predictions_map[winner_name]
+    test_pred_df.to_csv(outputs_dir / "test_predictions.csv", index=False)
+
+    # 6. Serialization for platform
     artifact = {
-        "model": model,
-        "model_name": model_name,
+        "model": winner_model,
+        "model_name": winner_name,
         "features": feature_cols,
         "metrics": {
-            "mae": round(float(mae), 3),
-            "rmse": round(float(rmse), 3),
-            "r2": round(float(r2), 4),
+            "mae": round(float(winner_row["mae"]), 3),
+            "rmse": round(float(winner_row["rmse"]), 3),
+            "r2": round(float(winner_row["r2"]), 4),
             "naive_rmse": round(float(naive_rmse), 3),
             "train_samples": int(len(X_train)),
             "test_samples": int(len(X_test)),
@@ -313,8 +409,32 @@ def train_and_evaluate_model():
     }
 
     joblib.dump(artifact, MODEL_OUTPUT_PATH)
-    print(f"\n✅ Standalone model artifact saved → {MODEL_OUTPUT_PATH}")
+    print(f"\n✅ Standalone platform artifact saved → {MODEL_OUTPUT_PATH}")
     print(f"   File size: {os.path.getsize(MODEL_OUTPUT_PATH) / 1024:.1f} KB")
+
+    # Also save to outputs/model_sklearn/
+    outputs_sklearn = outputs_dir / "model_sklearn"
+    outputs_sklearn.mkdir(parents=True, exist_ok=True)
+    joblib.dump(winner_model, outputs_sklearn / "model.joblib")
+
+    # Update metadata
+    metadata = {
+        "model_name": winner_name,
+        "model_kind": "sklearn",
+        "features": feature_cols,
+        "target": "target",
+        "label": "Next-hour PM2.5 (µg/m³)",
+        "metrics": {
+            "rmse": round(float(winner_row["rmse"]), 3),
+            "mae": round(float(winner_row["mae"]), 3),
+            "r2": round(float(winner_row["r2"]), 4),
+        },
+        "training_rows": int(len(X_train)),
+        "test_rows": int(len(X_test)),
+        "model_path": str(outputs_sklearn / "model.joblib"),
+    }
+    with open(outputs_dir / "model_metadata.json", "w") as f:
+        json.dump(metadata, f, indent=2)
 
     return artifact
 

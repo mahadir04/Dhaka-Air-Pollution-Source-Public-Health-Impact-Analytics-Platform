@@ -492,12 +492,13 @@ def main():
     lag24 = max(10.0, current_pm25 * (1.05 + 0.05 * np.sin(now_hour * np.pi / 12)))
     roll24 = (lag1 + lag24) / 2.0
 
-    # Build input feature vector exactly aligned with trained schema
+    # Build input feature vector aligned with model schema
     feature_row = pd.DataFrame([{
         "pm25_lag1": lag1,
         "pm25_lag24": lag24,
         "pm25_roll24": roll24,
         "hour": now_hour,
+        "dow": now_dow,
         "day_of_week": now_dow,
         "month": now_month,
         "season_enc": season_enc,
@@ -508,7 +509,13 @@ def main():
     }])
 
     if model_artifact and "model" in model_artifact:
-        pred_pm25 = float(model_artifact["model"].predict(feature_row)[0])
+        model_obj = model_artifact["model"]
+        req_features = getattr(model_obj, "feature_names_in_", None) or model_artifact.get("features", [])
+        if req_features is not None and len(req_features) > 0:
+            input_features = [f for f in req_features if f in feature_row.columns]
+            pred_pm25 = float(model_obj.predict(feature_row[input_features])[0])
+        else:
+            pred_pm25 = float(model_obj.predict(feature_row)[0])
     else:
         # Fallback calibrated persistence formula
         trapping = (850.0 / max(150.0, sim_blh)) ** 0.5
@@ -620,6 +627,7 @@ def main():
                 "pm25_lag24": lag24,
                 "pm25_roll24": running_roll,
                 "hour": fut_h,
+                "dow": fut_dow,
                 "day_of_week": fut_dow,
                 "month": fut_month,
                 "season_enc": fut_season,
@@ -630,7 +638,13 @@ def main():
             }])
 
             if model_artifact and "model" in model_artifact:
-                step_pred = float(model_artifact["model"].predict(f_row)[0])
+                model_obj = model_artifact["model"]
+                req_features = getattr(model_obj, "feature_names_in_", None) or model_artifact.get("features", [])
+                if req_features is not None and len(req_features) > 0:
+                    in_feats = [f for f in req_features if f in f_row.columns]
+                    step_pred = float(model_obj.predict(f_row[in_feats])[0])
+                else:
+                    step_pred = float(model_obj.predict(f_row)[0])
             else:
                 step_pred = curr_lag * 0.85 + (800.0 / f_blh) * 15.0
 
