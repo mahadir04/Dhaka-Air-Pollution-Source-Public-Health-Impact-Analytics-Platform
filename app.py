@@ -453,7 +453,8 @@ def main():
         st.markdown("---")
         if model_artifact:
             st.markdown("### 🧠 Active ML Model Engine")
-            st.caption(f"**Estimator:** HistGradientBoosting")
+            active_est = model_artifact.get("model_name", "XGBoost (XGBRegressor)")
+            st.caption(f"**Estimator:** {active_est}")
             st.caption(f"**Holdout MAE:** {model_artifact['metrics']['mae']} µg/m³")
             st.caption(f"**Holdout R²:** {model_artifact['metrics']['r2']}")
             st.caption(f"**Trained On:** {model_artifact['metrics']['train_samples']:,} hourly samples")

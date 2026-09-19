@@ -37,8 +37,15 @@ from pathlib import Path
 import joblib
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+
+try:
+    from xgboost import XGBRegressor
+    HAVE_XGBOOST = True
+except ImportError:
+    HAVE_XGBOOST = False
+    from sklearn.ensemble import HistGradientBoostingRegressor
+
 
 # ── Project directories ──────────────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -206,7 +213,7 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
 
 def train_and_evaluate_model():
     print("=" * 70)
-    print("  🚀 Training Dhaka PM2.5 Forecaster (HistGradientBoosting)")
+    print("  🚀 Training Dhaka PM2.5 Forecaster (XGBoost)")
     print("=" * 70)
 
     # 1. Generate / load dataset
@@ -241,15 +248,31 @@ def train_and_evaluate_model():
     print(f"   Test set:  {len(X_test):,} hours ({test_df['timestamp'].min().strftime('%Y-%m-%d')} to {test_df['timestamp'].max().strftime('%Y-%m-%d')})")
 
     # 3. Model instantiation & training
-    print("\n🧠 Fitting HistGradientBoostingRegressor with non-linear interaction terms...")
-    model = HistGradientBoostingRegressor(
-        max_iter=300,
-        max_depth=6,
-        learning_rate=0.06,
-        min_samples_leaf=25,
-        l2_regularization=0.1,
-        random_state=42,
-    )
+    if HAVE_XGBOOST:
+        print("\n🧠 Fitting XGBoost (XGBRegressor) with non-linear atmospheric interaction terms...")
+        model = XGBRegressor(
+            n_estimators=300,
+            max_depth=6,
+            learning_rate=0.05,
+            subsample=0.85,
+            colsample_bytree=0.85,
+            reg_alpha=0.1,
+            reg_lambda=1.0,
+            random_state=42,
+            n_jobs=-1,
+        )
+        model_name = "XGBoost (XGBRegressor)"
+    else:
+        print("\n🧠 Fitting HistGradientBoostingRegressor with non-linear interaction terms...")
+        model = HistGradientBoostingRegressor(
+            max_iter=300,
+            max_depth=6,
+            learning_rate=0.06,
+            min_samples_leaf=25,
+            l2_regularization=0.1,
+            random_state=42,
+        )
+        model_name = "HistGradientBoostingRegressor"
     model.fit(X_train, y_train)
 
     # 4. Evaluation on holdout test set
@@ -265,7 +288,7 @@ def train_and_evaluate_model():
     naive_r2 = r2_score(y_test, naive_preds)
 
     print("\n📈 Holdout Validation Results:")
-    print(f"   - HistGradientBoosting: MAE = {mae:.2f} µg/m³ | RMSE = {rmse:.2f} µg/m³ | R² = {r2:.4f}")
+    print(f"   - {model_name}: MAE = {mae:.2f} µg/m³ | RMSE = {rmse:.2f} µg/m³ | R² = {r2:.4f}")
     print(f"   - Naive Persistence:    MAE = {naive_mae:.2f} µg/m³ | RMSE = {naive_rmse:.2f} µg/m³ | R² = {naive_r2:.4f}")
     improvement = ((naive_rmse - rmse) / naive_rmse) * 100
     print(f"   ✨ RMSE Skill Improvement over Persistence: +{improvement:.1f}%")
@@ -273,6 +296,7 @@ def train_and_evaluate_model():
     # 5. Serialization
     artifact = {
         "model": model,
+        "model_name": model_name,
         "features": feature_cols,
         "metrics": {
             "mae": round(float(mae), 3),
