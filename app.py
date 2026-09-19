@@ -510,8 +510,12 @@ def main():
 
     if model_artifact and "model" in model_artifact:
         model_obj = model_artifact["model"]
-        req_features = getattr(model_obj, "feature_names_in_", None) or model_artifact.get("features", [])
-        if req_features is not None and len(req_features) > 0:
+        req_features = getattr(model_obj, "feature_names_in_", None)
+        if req_features is None:
+            req_features = model_artifact.get("features", [])
+        if hasattr(req_features, "tolist"):
+            req_features = req_features.tolist()
+        if req_features and len(req_features) > 0:
             input_features = [f for f in req_features if f in feature_row.columns]
             pred_pm25 = float(model_obj.predict(feature_row[input_features])[0])
         else:
@@ -639,8 +643,12 @@ def main():
 
             if model_artifact and "model" in model_artifact:
                 model_obj = model_artifact["model"]
-                req_features = getattr(model_obj, "feature_names_in_", None) or model_artifact.get("features", [])
-                if req_features is not None and len(req_features) > 0:
+                req_features = getattr(model_obj, "feature_names_in_", None)
+                if req_features is None:
+                    req_features = model_artifact.get("features", [])
+                if hasattr(req_features, "tolist"):
+                    req_features = req_features.tolist()
+                if req_features and len(req_features) > 0:
                     in_feats = [f for f in req_features if f in f_row.columns]
                     step_pred = float(model_obj.predict(f_row[in_feats])[0])
                 else:
