@@ -16,6 +16,22 @@ Outputs:
 
 import os
 import sys
+
+# ── Cross-version compatibility shim for scikit-learn Cython loss functions ───
+try:
+    if "_loss" not in sys.modules:
+        try:
+            import sklearn._loss._loss as _closs
+            sys.modules["_loss"] = _closs
+        except (ImportError, ModuleNotFoundError):
+            try:
+                import sklearn._loss as _sk_loss
+                sys.modules["_loss"] = _sk_loss
+            except (ImportError, ModuleNotFoundError):
+                pass
+except Exception:
+    pass
+
 from datetime import datetime, timedelta
 from pathlib import Path
 import joblib

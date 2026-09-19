@@ -250,4 +250,4 @@ if name_col and ts_col:
         completeness.append(row)
 
     comp_df = pd.DataFrame(completeness)
-    st.dataframe(comp_df, use_container_width=True, hide_index=True)
+    st.dataframe(comp_df, hide_index=True)

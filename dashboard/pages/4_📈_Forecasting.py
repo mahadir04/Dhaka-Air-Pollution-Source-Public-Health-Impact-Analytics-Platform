@@ -73,8 +73,7 @@ with tab_eval:
         st.markdown("#### 🏁 Candidate Model Comparison")
         if not comparison_df.empty:
             st.dataframe(comparison_df.style.highlight_min(subset=["rmse", "mae"], color="#1e3a5f")
-                                            .highlight_max(subset=["r2"], color="#1e3a5f"),
-                         use_container_width=True)
+                                            .highlight_max(subset=["r2"], color="#1e3a5f"))
 
             # Bar chart of RMSE
             fig, ax = plt.subplots(figsize=(6, 3.8), facecolor="#0f0c29")
@@ -94,7 +93,7 @@ with tab_eval:
             st.pyplot(fig)
             plt.close(fig)
         elif (FIGURES_DIR / "model_comparison.png").exists():
-            st.image(str(FIGURES_DIR / "model_comparison.png"), use_container_width=True)
+            st.image(str(FIGURES_DIR / "model_comparison.png"), width="stretch")
         else:
             st.info("Train models via `python forecasting/train_regression.py` or run the notebook to generate model comparison metrics.")
 
@@ -115,7 +114,7 @@ with tab_eval:
             plt.close(fig)
             st.caption("Auto-regressive lag features (PM2.5 lag 1h, 24h, and rolling 24h) and boundary layer height dominate predictive skill.")
         elif (FIGURES_DIR / "feature_importance.png").exists():
-            st.image(str(FIGURES_DIR / "feature_importance.png"), use_container_width=True)
+            st.image(str(FIGURES_DIR / "feature_importance.png"), width="stretch")
         else:
             st.info("Feature importance data will appear after training.")
 
@@ -146,7 +145,7 @@ with tab_eval:
             st.pyplot(fig)
             plt.close(fig)
         elif (FIGURES_DIR / "forecast_vs_actual.png").exists():
-            st.image(str(FIGURES_DIR / "forecast_vs_actual.png"), use_container_width=True)
+            st.image(str(FIGURES_DIR / "forecast_vs_actual.png"), width="stretch")
         else:
             st.info("Run model training to produce forecast evaluation plots.")
 
@@ -171,7 +170,7 @@ with tab_eval:
             st.pyplot(fig)
             plt.close(fig)
         elif (FIGURES_DIR / "actual_vs_predicted.png").exists():
-            st.image(str(FIGURES_DIR / "actual_vs_predicted.png"), use_container_width=True)
+            st.image(str(FIGURES_DIR / "actual_vs_predicted.png"), width="stretch")
         else:
             st.info("Run model training to generate calibration scatter plot.")
 
@@ -217,7 +216,7 @@ with tab_predict:
             season_names = ["Winter (Dec–Feb)", "Pre-Monsoon (Mar–May)", "Monsoon (Jun–Sep)", "Post-Monsoon (Oct–Nov)"]
             in_season = st.selectbox("Season", options=[0, 1, 2, 3], format_func=lambda s: season_names[s], index=1)
 
-        submitted = st.form_submit_button("🚀 Compute Next-Hour Prediction", use_container_width=True)
+        submitted = st.form_submit_button("🚀 Compute Next-Hour Prediction", width="stretch")
 
     if submitted:
         # Build feature dictionary

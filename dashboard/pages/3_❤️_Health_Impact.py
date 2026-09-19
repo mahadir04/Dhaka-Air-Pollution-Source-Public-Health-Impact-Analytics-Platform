@@ -212,13 +212,13 @@ st.markdown("### 📋 Health Burden Data")
 tab1, tab2 = st.tabs(["Long-Term Burden", "Health Impact Ranking"])
 
 with tab1:
-    st.dataframe(burden_df, use_container_width=True, hide_index=True)
+    st.dataframe(burden_df, hide_index=True)
 
 with tab2:
     if not ranking_df.empty:
         display_cols = [c for c in ["rank", "name", "season", "mean_pm25", "ar_pct",
                                      "catchment_pop", "health_impact_score"] if c in ranking_df.columns]
-        st.dataframe(ranking_df[display_cols].head(20), use_container_width=True, hide_index=True)
+        st.dataframe(ranking_df[display_cols].head(20), hide_index=True)
     else:
         st.info("Ranking data not available.")
 

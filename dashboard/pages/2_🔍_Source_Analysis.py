@@ -222,4 +222,4 @@ with st.expander("Show raw data"):
     for s in available_sources:
         display_df[SOURCE_LABELS[s]] = display_df[s].round(4)
     cols_to_show = [c for c in [name_col, season_col, "n_readings"] + list(SOURCE_LABELS.values()) if c in display_df.columns]
-    st.dataframe(display_df[cols_to_show], use_container_width=True, hide_index=True)
+    st.dataframe(display_df[cols_to_show], hide_index=True)

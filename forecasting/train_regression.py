@@ -22,6 +22,21 @@ import shutil
 import sys
 from pathlib import Path
 
+# ── Cross-version compatibility shim for scikit-learn Cython loss functions ───
+try:
+    if "_loss" not in sys.modules:
+        try:
+            import sklearn._loss._loss as _closs
+            sys.modules["_loss"] = _closs
+        except (ImportError, ModuleNotFoundError):
+            try:
+                import sklearn._loss as _sk_loss
+                sys.modules["_loss"] = _sk_loss
+            except (ImportError, ModuleNotFoundError):
+                pass
+except Exception:
+    pass
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import numpy as np
