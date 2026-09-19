@@ -927,8 +927,8 @@ def main():
 
             fig_map = go.Figure()
 
-            # Continuous Density Heatmap Layer
-            fig_map.add_trace(go.Densitymapbox(
+            # Continuous Density Heatmap Layer (Plotly 6.x MapLibre API)
+            fig_map.add_trace(go.Densitymap(
                 lat=filtered_df["latitude"],
                 lon=filtered_df["longitude"],
                 z=filtered_df["metric_val"],
@@ -955,8 +955,8 @@ def main():
                 hoverinfo="skip"
             ))
 
-            # Interactive Station Markers Layer
-            fig_map.add_trace(go.Scattermapbox(
+            # Interactive Station Markers Layer (Plotly 6.x MapLibre API)
+            fig_map.add_trace(go.Scattermap(
                 lat=filtered_df["latitude"],
                 lon=filtered_df["longitude"],
                 mode="markers+text",
@@ -988,9 +988,9 @@ def main():
             ))
 
             fig_map.update_layout(
-                mapbox_style="carto-darkmatter",
-                mapbox_center=dict(lat=23.788, lon=90.398),
-                mapbox_zoom=11.2,
+                map_style="carto-darkmatter",
+                map_center=dict(lat=23.788, lon=90.398),
+                map_zoom=11.2,
                 paper_bgcolor="rgba(0,0,0,0)",
                 plot_bgcolor="rgba(0,0,0,0)",
                 margin=dict(l=0, r=0, t=0, b=0),
